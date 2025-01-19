@@ -1,0 +1,17 @@
+build/
+
+.vscode/
+
+temp/*
+
+*.exe
+
+*.out
+
+*.o
+
+*.gdbinit
+
+*.tmp
+
+*.temp
