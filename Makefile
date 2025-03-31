@@ -1,6 +1,6 @@
 # ./Makefile
 
-CC = gcc
+CC = clang++
 CFLAGS = -Wall -g $(INCLUDES) -Wextra -funroll-loops -march=native
 LDFLAGS =
 INCLUDES = -I./inc
@@ -9,24 +9,50 @@ LIB_DIR = lib
 BUILD_DIR = build
 BIN_DIR = $(BUILD_DIR)
 
-SOURCES := $(wildcard $(LIB_DIR)/*.c)
-OBJECTS := $(patsubst $(LIB_DIR)/%.c,$(BUILD_DIR)/%.o,$(SOURCES))
-TEST_EXEC = $(BIN_DIR)/test_parser.out
+CPP_EXEC = $(BUILD_DIR)/test_cpp
+C_EXEC = $(BUILD_DIR)/test_c
 
-all: $(TEST_EXEC)
+# build targets
+
+c_gen: CC = clang
+c_gen: $(C_EXEC)
+
+cpp_gen: CC = clang++
+cpp_gen: $(CPP_EXEC)
+
+test_c: CC = clang
+test_c: $(C_EXEC)
+	$(C_EXEC) help
+
+test_cpp: CC = clang++
+test_cpp: $(CPP_EXEC)
+	$(CPP_EXEC) help
 
 clean:
 	rm -rf build
 
 .PHONY: clean
 
-$(TEST_EXEC): $(OBJECTS) $(BUILD_DIR)/main.o | $(BIN_DIR)
+# link targets
+
+$(CPP_EXEC): $(BUILD_DIR)/scppap.o $(BUILD_DIR)/test_cpp.o | $(BIN_DIR)
 	$(CC) $(LDFLAGS) -o $@ $^
 
-$(BUILD_DIR)/main.o: ./main.c $(BUILD_DIR)
+$(C_EXEC): $(BUILD_DIR)/scap.o $(BUILD_DIR)/test_c.o | $(BIN_DIR)
+	$(CC) $(LDFLAGS) -o $@ $^
+
+# compile targets
+
+$(BUILD_DIR)/test_c.o:./test_c.c $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/%.o: $(LIB_DIR)/%.c | $(BUILD_DIR)
+$(BUILD_DIR)/test_cpp.o: ./test_cpp.cpp $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/scap.o: $(LIB_DIR)/scap.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/scppap.o: $(LIB_DIR)/scppap.cpp | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR):
