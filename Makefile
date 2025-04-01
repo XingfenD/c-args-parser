@@ -1,6 +1,6 @@
 # ./Makefile
-
-CC = clang++
+CC_c = gcc
+CC_cpp = g++
 CFLAGS = -Wall -g $(INCLUDES) -Wextra -funroll-loops -march=native
 LDFLAGS =
 INCLUDES = -I./inc
@@ -14,17 +14,17 @@ C_EXEC = $(BUILD_DIR)/test_c
 
 # build targets
 
-c_gen: CC = clang
+c_gen: CC = $(CC_c)
 c_gen: $(C_EXEC)
 
-cpp_gen: CC = clang++
+cpp_gen: CC = $(CC_cpp)
 cpp_gen: $(CPP_EXEC)
 
-test_c: CC = clang
+test_c: CC = $(CC_c)
 test_c: $(C_EXEC)
 	$(C_EXEC) help
 
-test_cpp: CC = clang++
+test_cpp: CC = $(CC_cpp)
 test_cpp: $(CPP_EXEC)
 	$(CPP_EXEC) help
 

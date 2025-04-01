@@ -11,37 +11,106 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <scap.h>
 
 
-SAPCommand rootCmd;
+SAPCommand rootCmd; /* the global root command */
+static SAPCommand helpCmd;
+// int cmd_cnt = 0; /* the number of commands */
 
-void init_tree_node(TreeNode *node) {
+/* ++++ functions of TreeNode ++++ */
+static void init_tree_node(TreeNode *node) {
     if (node == NULL) {
         return;
     }
 
     node->child_cnt = 0;
+    node->depth = 0;
     node->parent = NULL;
 
     /* NOTE: free node.children */
     node->children = (TreeNode **) calloc(sizeof(TreeNode *), MAX_SUBCMD_COUNT);
 }
 
-static TreeNode* append_child(TreeNode* parent, TreeNode* child) {
+static int get_max_depth(TreeNode *node) {
+    int max_depth = 0;
+    if (node == NULL) { /* this branch won't be excuted */
+        return max_depth;
+    }
+
+    /* get the max depth of all children */
+    for (int i = 0; i < node->child_cnt; i++) {
+        int child_depth = get_max_depth(node->children[i]);
+        if (child_depth > max_depth) {
+            max_depth = child_depth;
+        }
+    }
+    return max_depth + 1;
+}
+
+// static void recursive_adjust_depth(int depth2add, TreeNode *node) {
+//     if (node == NULL) {
+//         return;
+//     }
+
+//     node->depth += depth2add;
+//     for (int i = 0; i < node->child_cnt; i++) {
+//         recursive_adjust_depth(depth2add, node->children[i]);
+//     }
+// }
+
+static void non_recursive_adjust_depth(int depth2add, TreeNode *node) {
+    if (node == NULL) return;
+
+    /* use stack instead of recursion */
+    TreeNode *stack[MAX_CMD_DEPTH];  /* the maximum depth of the tree is MAX_CMD_DEPTH */
+    int top = -1;
+
+    stack[++top] = node;  /* push the root node */
+    while (top >= 0) {
+        TreeNode *current = stack[top--];
+        current->depth += depth2add + 1;
+
+        for (int i = 0; i < current->child_cnt; i++) {
+            stack[++top] = current->children[i];    /* push the children nodes */
+        }
+    }
+}
+
+
+static int _adjust_depth(int depth2add, TreeNode *subtree_root) {
+    if (subtree_root == NULL) {
+        return 0;
+    }
+    if (get_max_depth(subtree_root) + depth2add > MAX_CMD_DEPTH) {
+        return -1;
+    }
+
+    /* adjust all the depth or not */
+    non_recursive_adjust_depth(depth2add, subtree_root);
+    return 1;
+}
+
+static int adjust_depth(TreeNode *parent, TreeNode *subtree_root) {
+    return _adjust_depth(parent->depth, subtree_root);
+}
+
+static TreeNode* append_child(TreeNode *parent, TreeNode *child) {
     if (parent == NULL ||
         child == NULL ||
-        parent->child_cnt >= MAX_SUBCMD_COUNT) {
+        parent->child_cnt >= MAX_SUBCMD_COUNT
+    ) {
         return NULL;
     }
-
     assert(parent->children != NULL);
-
-    if (parent->child_cnt < MAX_SUBCMD_COUNT) {
-        child->parent = parent;
-        parent->children[parent->child_cnt++] = child;
+    if (adjust_depth(parent, child) != 1) {
+        return NULL;
     }
+    child->parent = parent;
+    parent->children[parent->child_cnt++] = child;
+
     return parent;
 }
 
@@ -57,49 +126,25 @@ static void free_node_tree(TreeNode *root) {
     free(root->children);
 }
 
-/* functions of SAPCommand */
+/* ---- functions of TreeNode ---- */
 
-// SAPCommand* get_parent_cmd(SAPCommand *cmd) {
-//     if (cmd == NULL) {
-//         return NULL;
-//     }
 
-//     assert(cmd->tree_node!= NULL);
 
-//     if (cmd->tree_node->parent == NULL) {
-//         return NULL;
-//     }
+/* ++++ functions of cmd_exec ++++ */
 
-//     return to_container(cmd->tree_node->parent, SAPCommand, tree_node);
-// }
+int void_exec(SAPCommand* caller, int argc, char *argv[]) {
+    /* TODO: print the message that the command haven't been allocate function */
+    assert(caller != NULL);
 
-void init_root_cmd(const char *name, const char *short_desc, const char *long_desc, int (*func)(int argc, char **argv)) {
-    init_sap_command(&rootCmd, name, short_desc, long_desc, func);
+    printf("The command %s haven't been allocate function\n", caller->name);
+    return 0;
 }
 
-void free_root_cmd() {
-    free_node_tree(&rootCmd.tree_node);
-}
+int help_exec(SAPCommand* caller, int argc, char *argv[]) {
+    /* TODO: parse the argv to provide detailed help for subfunctions */
+    assert(caller != NULL);
+    assert(strcmp("help", caller->name) == 0);
 
-void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, int (*func)(int argc, char *argv[])) {
-    assert(cmd!= NULL);
-    cmd->name = name;
-    cmd->short_desc = short_desc;
-    cmd->long_desc = long_desc;
-    cmd->func = func;
-    init_tree_node(&cmd->tree_node);
-}
-
-SAPCommand* add_subcmd(SAPCommand *parent, SAPCommand *child) {
-    assert(parent!= NULL);
-    assert(child!= NULL);
-
-    append_child(&parent->tree_node, &child->tree_node);
-
-    return parent;
-}
-
-void print_help() {
     if (rootCmd.short_desc != NULL) {
         printf("%s\n", rootCmd.short_desc);
     }
@@ -114,8 +159,129 @@ void print_help() {
         SAPCommand *cmd = to_container(rootCmd.tree_node.children[i], SAPCommand, tree_node);
         printf("  %s\t\t%s\n", cmd->name, cmd->short_desc);
     }
+
+    return 0;
 }
 
-// void print_cmd_help(SAPCommand *cmd) {
-//     char **cmd_name_stack = (char **)malloc(sizeof(char *) * MAX_SUBCMD_COUNT);
+/* ---- functions of cmd_exec ---- */
+
+
+
+/* ++++ functions of SAPCommand ++++ */
+
+// void get_call_stack(SAPCommand *cmd) {
+//     /* finish this function after realize depth feature*/
+//     assert(cmd!= NULL);
+//     char *stack[MAX_SUBCMD_COUNT];
 // }
+
+static void add_help_cmd() {
+    init_sap_command(&helpCmd, "help", "Display this help message", NULL, help_exec);
+    add_subcmd(&rootCmd, &helpCmd);
+}
+
+SAPCommand* get_parent_cmd(SAPCommand cmd) {
+    if (cmd.tree_node.parent == NULL) {
+        return NULL;
+    }
+
+    return to_container(cmd.tree_node.parent, SAPCommand, tree_node);
+}
+
+void init_root_cmd(const char *name, const char *short_desc, const char *long_desc, CmdExec func) {
+    init_sap_command(&rootCmd, name, short_desc, long_desc, func);
+}
+
+void free_root_cmd() {
+    free_node_tree(&rootCmd.tree_node);
+}
+
+void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec func) {
+    assert(cmd!= NULL);
+    cmd->name = name;
+    cmd->short_desc = short_desc;
+    cmd->long_desc = long_desc;
+    cmd->func = func;
+    init_tree_node(&cmd->tree_node);
+}
+
+SAPCommand* add_subcmd(SAPCommand *parent, SAPCommand *child) {
+    assert(parent!= NULL);
+    assert(child!= NULL);
+
+    return append_child(&parent->tree_node, &child->tree_node);
+}
+
+int call_subcmd(int argc, char *argv[]) {
+    /* TODO: handle the unknown command */
+    /* TODO: handle the command that have subcmd but not provide */
+    /* BUG: see below */
+    /**
+     *
+     * 1. if the command have subcmd but not provide, segfault will occur when strcmp.
+     *
+     * cmd: ./build/test_c cmd2
+     *
+     * 2. if the command have subcmd but provide option instead of subcmd,
+     *    the option will be recognized as subcmd, and raise an error of unknown command.
+     *
+     * cmd:./build/test_c cmd2 -h
+     */
+
+    add_help_cmd(); /* add the subcommand help to root command */
+
+    #define not_stack_select ((stack_select == 0)? 1: 0)
+    TreeNode *stack[MAX_CMD_COUNT][2];  /* two stack cosplay a queue */
+    int top[2] = {-1, -1};                  /* the top ptr of the two stack */
+    int stack_select = 0;                   /* select the available stack*/
+    int depth = 0;
+
+    assert(&rootCmd.tree_node != NULL);
+
+    /* push the root into stack */
+    stack[++top[stack_select]][stack_select] = &(rootCmd.tree_node);
+
+    while (top[stack_select] >= 0) {
+        TreeNode *stack_top = stack[top[stack_select]][stack_select];
+        SAPCommand *crt_cmd = to_container(stack_top, SAPCommand, tree_node);   /* current command */
+
+        if (strcmp(crt_cmd->name, argv[depth]) != 0 &&
+            !(strcmp(crt_cmd->name, rootCmd.name) == 0)) {
+            /* if current cmd isn't our target cmd or root cmd */
+            if (--top[stack_select] < 0) {
+                /* pop and judge whether the stack is empty */
+                stack_select = not_stack_select; /* switch the stack */
+                depth++;
+            }   /* top[stack_select] == -1 */
+            continue;
+        }   /* if current cmd isn't our target cmd */
+
+        /* ++++ if current cmd is our target cmd ++++ */
+
+        if (stack_top->child_cnt == 0) {
+            /* leaf node */
+            return (crt_cmd->func)(crt_cmd, argc - depth, argv + depth);
+        }   /* leaf node */
+
+        /* ++++ non-leaf node ++++ */
+
+        for (int i = 0; i < stack_top->child_cnt; i++) {
+            /* push the subcmds into the other stack */
+            stack[++top[not_stack_select]][not_stack_select] = stack_top->children[i];
+        }
+
+        top[stack_select] = -1;
+        stack_select = not_stack_select;
+        depth++;
+
+        /* ---- non-leaf node ---- */
+        /* ---- if current cmd is our target cmd ---- */
+    #undef not_stack_select
+    }
+
+    /* exit of unknown cmd */
+    printf("Unknown command: %s\n", argv[depth - 1]);
+    return -1;
+}
+
+/* ---- functions of SAPCommand ---- */
