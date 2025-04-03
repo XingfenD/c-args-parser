@@ -163,6 +163,12 @@ int help_exec(SAPCommand* caller, int argc, char *argv[]) {
     return 0;
 }
 
+int call_exec(SAPCommand* caller, int argc, char *argv[]) {
+    assert(caller!= NULL);
+    printf("%s\n", argv[0]);
+    return caller->func(caller, argc, argv);
+}
+
 /* ---- functions of cmd_exec ---- */
 
 
@@ -201,7 +207,7 @@ void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc,
     cmd->name = name;
     cmd->short_desc = short_desc;
     cmd->long_desc = long_desc;
-    cmd->func = func;
+    cmd->func = (func == NULL)? void_exec: func;
     init_tree_node(&cmd->tree_node);
 }
 
@@ -209,24 +215,14 @@ SAPCommand* add_subcmd(SAPCommand *parent, SAPCommand *child) {
     assert(parent!= NULL);
     assert(child!= NULL);
 
-    return append_child(&parent->tree_node, &child->tree_node);
+    if (append_child(&parent->tree_node, &child->tree_node) == NULL) {
+        return NULL;
+    }
+
+    return parent;
 }
 
 int call_subcmd(int argc, char *argv[]) {
-    /* TODO: handle the unknown command */
-    /* TODO: handle the command that have subcmd but not provide */
-    /* BUG: see below */
-    /**
-     *
-     * 1. if the command have subcmd but not provide, segfault will occur when strcmp.
-     *
-     * cmd: ./build/test_c cmd2
-     *
-     * 2. if the command have subcmd but provide option instead of subcmd,
-     *    the option will be recognized as subcmd, and raise an error of unknown command.
-     *
-     * cmd:./build/test_c cmd2 -h
-     */
 
     add_help_cmd(); /* add the subcommand help to root command */
 
@@ -245,6 +241,18 @@ int call_subcmd(int argc, char *argv[]) {
         TreeNode *stack_top = stack[top[stack_select]][stack_select];
         SAPCommand *crt_cmd = to_container(stack_top, SAPCommand, tree_node);   /* current command */
 
+        if (depth >= argc || argv[depth][0] == '-') {
+            /* if the depth is out of range or the argv[depth] is an option */
+            /**
+             * that is:
+             * 1. the command have subcmd but is not provided
+             * 2. the command have subcmd but an option is provided instead of subcmd
+             */
+            SAPCommand *parent_cmd = get_parent_cmd(*crt_cmd);
+            /* exec the parent cmd, consequently depth decrease */
+            return call_exec(parent_cmd, argc - (depth - 1), argv + (depth - 1));
+        }
+
         if (strcmp(crt_cmd->name, argv[depth]) != 0 &&
             !(strcmp(crt_cmd->name, rootCmd.name) == 0)) {
             /* if current cmd isn't our target cmd or root cmd */
@@ -260,7 +268,7 @@ int call_subcmd(int argc, char *argv[]) {
 
         if (stack_top->child_cnt == 0) {
             /* leaf node */
-            return (crt_cmd->func)(crt_cmd, argc - depth, argv + depth);
+            return call_exec(crt_cmd, argc - depth, argv + depth);
         }   /* leaf node */
 
         /* ++++ non-leaf node ++++ */
