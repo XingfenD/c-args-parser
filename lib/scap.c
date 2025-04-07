@@ -16,18 +16,26 @@
 #include <scap.h>
 
 
-SAPCommand rootCmd;         /* the global root command */
-static SAPCommand helpCmd;  /* the help command */
-static int cmd_cnt = 0;     /* the number of commands */
+SAPCommand rootCmd;             /* the global root command */
+static SAPCommand helpCmd;      /* the help command */
+static int cmd_cnt = 0;         /* the number of commands */
+static Flag helpFlag;           /* the help flag */
+const static int IS_PROVIDED = 1;   /* the flag is provided */
 
 /* ++++ functions of Flags ++++ */
 
-void init_flag(Flag *flag, const char *flag_name, const char shorthand, const char *usage, const char *dft_val) {
+void init_flag(Flag *flag, const char *flag_name, const char shorthand, const char *usage, void *dft_val) {
     assert(flag != NULL);
     flag->flag_name = flag_name;
     flag->shorthand = shorthand;
     flag->usage = usage;
     flag->value = dft_val;
+    flag->type = single_arg;
+}
+
+void set_flag_type(Flag *flag, FlagType type) {
+    assert(flag != NULL);
+    flag->type = type;
 }
 
 SAPCommand *add_flag(SAPCommand *cmd, Flag *flag) {
@@ -43,13 +51,19 @@ SAPCommand *add_flag(SAPCommand *cmd, Flag *flag) {
 SAPCommand *add_default_flag(SAPCommand *cmd, Flag *flag) {
     assert(cmd!= NULL);
     assert(flag!= NULL);
+    if (add_flag(cmd, flag) == NULL) {
+        return NULL;
+    }
     cmd->default_flag = flag;
     return cmd;
 }
 
 /* ---- functions of Flags ----*/
 
+
+
 /* ++++ functions of TreeNode ++++ */
+
 static void init_tree_node(TreeNode *node) {
     if (node == NULL) {
         return;
@@ -59,7 +73,6 @@ static void init_tree_node(TreeNode *node) {
     node->depth = 0;
     node->parent = NULL;
 
-    /* NOTE: free node.children */
     node->children = (TreeNode **) calloc(sizeof(TreeNode *), MAX_SUBCMD_COUNT);
 }
 
@@ -107,7 +120,6 @@ static void non_recursive_adjust_depth(int depth2add, TreeNode *node) {
         }
     }
 }
-
 
 static int _adjust_depth(int depth2add, TreeNode *subtree_root) {
     if (subtree_root == NULL) {
@@ -190,10 +202,12 @@ static void get_cmd_stack(SAPCommand *cmd, SAPCommand *call_stack[MAX_SUBCMD_COU
     }
 }
 
-static SAPCommand* find_cmd_by_stack(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
-    /* NOTE: the first command in cmd_names is $cmd */
+static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
+    /* NOTE: the first command in cmd_names may not be $cmd */
     #define not_stack_select ((stack_select == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
+    TreeNode *stack_top = NULL;
+    SAPCommand *crt_cmd = NULL;
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
     int stack_select = 0;                   /* select the available stack*/
     int depth = 0;
@@ -204,8 +218,8 @@ static SAPCommand* find_cmd_by_stack(SAPCommand *cmd, int cmd_cnt, char *cmd_nam
     stack[++top[stack_select]][stack_select] = &(cmd->tree_node);
 
     while (top[stack_select] >= 0) {
-        TreeNode *stack_top = stack[top[stack_select]][stack_select];
-        SAPCommand *crt_cmd = node2cmd(stack_top);   /* current command */
+        stack_top = stack[top[stack_select]][stack_select];
+        crt_cmd = node2cmd(stack_top);   /* current command */
 
         if (depth >= cmd_cnt || cmd_names[depth][0] == '-') {
             /* if the depth is out of range or the argv[depth] is an option */
@@ -223,7 +237,7 @@ static SAPCommand* find_cmd_by_stack(SAPCommand *cmd, int cmd_cnt, char *cmd_nam
         }
 
         if (strcmp(crt_cmd->name, cmd_names[depth]) != 0 &&
-            !(strcmp(crt_cmd->name, cmd->name) == 0)) {
+            strcmp(crt_cmd->name, cmd->name) != 0) {
             /* if current cmd isn't our target cmd or root cmd */
             if (--top[stack_select] < 0) {
                 /* pop and judge whether the stack is empty */
@@ -259,18 +273,188 @@ static SAPCommand* find_cmd_by_stack(SAPCommand *cmd, int cmd_cnt, char *cmd_nam
     #undef not_stack_select
     }
 
-    /* exit of unknown cmds */
-    if (out_depth!= NULL) {
+    /* ++++ exit of unknown cmds ++++ */
+    if (out_depth != NULL) {
+        *out_depth = depth - 1;
+    }
+
+    if (get_parent_cmd(*crt_cmd)->default_flag != NULL) {
+        *out_depth -= 1;
+        return get_parent_cmd(*crt_cmd);
+    }
+
+    return NULL;
+}
+
+static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
+    /* NOTE: the first command in cmd_names may not be $cmd */
+    #define not_stack_select ((stack_select == 0)? 1: 0)
+    TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
+    int top[2] = {-1, -1};                  /* the top ptr of the two stack */
+    int stack_select = 0;                   /* select the available stack*/
+    int depth = 0;
+
+    assert(cmd!= NULL);
+
+    /* push the root into stack */
+    stack[++top[stack_select]][stack_select] = &(cmd->tree_node);
+
+    while (top[stack_select] >= 0) {
+        TreeNode *stack_top = stack[top[stack_select]][stack_select];
+        SAPCommand *crt_cmd = node2cmd(stack_top);   /* current command */
+
+        if (depth >= cmd_cnt || cmd_names[depth][0] == '-') {
+            /* if the depth is out of range or the argv[depth] is an option */
+            /**
+             * that is:
+             * 1. the command have subcmd but is not provided
+             * 2. the command have subcmd but an option is provided instead of subcmd
+             */
+            SAPCommand *parent_cmd = get_parent_cmd(*crt_cmd);
+            /* exec the parent cmd, consequently depth decrease */
+            if (out_depth != NULL) {
+                *out_depth = depth - 1;
+            }
+            return parent_cmd;
+        }
+
+        if (strcmp(crt_cmd->name, cmd_names[depth]) != 0 &&
+            strcmp(crt_cmd->name, cmd->name) != 0) {
+            /* if current cmd isn't our target cmd or root cmd */
+            if (--top[stack_select] < 0) {
+                /* pop and judge whether the stack is empty */
+                stack_select = not_stack_select;    /* switch the stack */
+                depth++;
+            }   /* top[stack_select] == -1 */
+            continue;
+        }   /* if current cmd isn't our target cmd */
+
+        /* ++++ if current cmd is our target cmd ++++ */
+
+        if (stack_top->child_cnt == 0) {
+            /* exit of leaf nodes */
+            if (out_depth != NULL) {
+                *out_depth = depth;
+            }
+            return crt_cmd;
+        }   /* exit of leaf nodes */
+
+        /* ++++ non-leaf node ++++ */
+
+        for (int i = 0; i < stack_top->child_cnt; i++) {
+            /* push the subcmds into the other stack */
+            stack[++top[not_stack_select]][not_stack_select] = stack_top->children[i];
+        }
+
+        top[stack_select] = -1;
+        stack_select = not_stack_select;
+        depth++;
+
+        /* ---- non-leaf node ---- */
+        /* ---- if current cmd is our target cmd ---- */
+    #undef not_stack_select
+    }
+
+    /* ++++ exit of unknown cmds ++++ */
+    if (out_depth != NULL) {
         *out_depth = depth - 1;
     }
     return NULL;
 }
+
+static int get_option_type(char *arg) {
+    if (
+        (arg[0] == '-' && arg[1] == '\0') ||
+        (arg[0] == '-' && arg[1] == '-' && arg[2] == '\0')
+    ) {
+        /* if the arg is an error option */
+        return -1;
+    } else if (arg[0] == '-' && arg[1] == '-') {    /* if the arg is a long option */
+        return 1;
+    } else if (arg[0] == '-' && arg[1] != '\0') {   /* if the arg is a short option */
+        return 2;
+    } else {    /* if the arg is a normal arg */
+        return 0;
+    }
+}
+
+static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
+    /* TODO: identify the help flag */
+    /* TODO: parse the default flag(recognize the arg without option in cmdline) */
+    assert(cmd != NULL);
+    assert(argc > 0);
+    assert(argv != NULL);
+    int flag_idxs[MAX_ARG_COUNT];
+    int flag_num = 0;
+
+    /* find the options */
+    for (int i = 1; i < argc; i++) {
+        switch (get_option_type(argv[i])) {
+        case -1:    /* if the arg is an error option */
+            return i;
+        case 1:     /* if the arg is a long option */
+        case 2:     /* if the arg is a short option */
+            flag_idxs[flag_num++] = i;
+        }
+    }   /* loop the argv */
+
+    for (int i = 0; i < flag_num; i++) {
+        int j = 0;
+        for (j = 0; j < cmd->flag_cnt; j++) {
+            if (
+                (argv[flag_idxs[i]][1] == '-' && strcmp(argv[flag_idxs[i]] + 2, cmd->flags[j]->flag_name)== 0) ||
+                (argv[flag_idxs[i]][1] != '-' && argv[flag_idxs[i]][1] == cmd->flags[j]->shorthand)
+            ) {
+                /* current argv: argv[flag_idxs[i]] */
+                /* current flag: cmd->flags[j] */
+                if (cmd->flags[j]->type == single_arg) {
+                    /* if the flag is not multi-arg */
+                    if (argv[flag_idxs[i]][1] == '-') {
+                        /* if the arg is a long option */
+                        cmd->flags[j]->value = argv[flag_idxs[i] + 1];
+                    } else {
+                        /* if the arg is a short option */
+                        cmd->flags[j]->value = argv[flag_idxs[i] + 1];
+                    }
+                    break;
+                } else if (cmd->flags[j]->type == no_arg) {
+                    /* if the flag is no-arg */
+                    cmd->flags[j]->value = (void *) &IS_PROVIDED;
+                } else if (cmd->flags[j]->type == multi_arg) {
+                    int arg_cnt = 0;
+                    char *arg_stack[argc];
+                    /* if the flag is multi-arg */
+                    for (int k = flag_idxs[i] + 1; k < argc; k++) {
+                        if (get_option_type(argv[k]) == 0) {
+                            arg_stack[arg_cnt++] = argv[k];
+                        } else {
+                            break;
+                        }
+                    }
+                    cmd->flags[j]->value = (char **) malloc(sizeof(char *) * (arg_cnt + 1));
+                    for (int i = 0; i < arg_cnt; i++) {
+                        ((char **) cmd->flags[j]->value)[i] = arg_stack[i];
+                    }
+                    ((char **) cmd->flags[j]->value)[arg_cnt] = NULL;
+                }
+                break;
+            }
+        }   /* loop the flags */
+        if (j == cmd->flag_cnt) {
+            return flag_idxs[i];
+        }
+    }   /* loop the flags in cmd line */
+
+    return 0;
+}
+
 
 static void print_cmd_help(SAPCommand *cmd) {
     SAPCommand *call_stack[MAX_CMD_DEPTH];
     int p_stack = 0;
 
     assert(cmd != NULL);
+    get_cmd_stack(cmd, call_stack);
 
     printf("Description: %s\n\n", cmd->short_desc);
     if (cmd->long_desc!= NULL) {
@@ -278,7 +462,14 @@ static void print_cmd_help(SAPCommand *cmd) {
     }
 
     /* TODO: modify the Usage print */
-    printf("Usage: %s [options]\n\n", cmd->name);
+    printf("Usage: %s", cmd->name);
+    if (cmd->tree_node.child_cnt != 0) {
+        printf(" [command]");
+    }
+    if (cmd->flag_cnt != 0) {
+        printf(" [options]");
+    }
+    printf("\n\n");
 
     /* print the available subcmds */
     if (cmd->tree_node.child_cnt != 0) {
@@ -300,7 +491,7 @@ static void print_cmd_help(SAPCommand *cmd) {
             }
             printf("--%s\t%s\n", cmd->flags[i]->flag_name, cmd->flags[i]->usage);
             if (cmd->flags[i]->value != NULL) {
-                printf("    Default: %s\n", cmd->flags[i]->value);
+                printf("    Default: %s\n", (const char *) cmd->flags[i]->value);
             }
         }
         printf("\n");
@@ -309,7 +500,6 @@ static void print_cmd_help(SAPCommand *cmd) {
     if (get_child_cmd_cnt(cmd) > 0) {
 
         printf("Use \"");
-        get_cmd_stack(cmd, call_stack);
         while (call_stack[p_stack] != cmd) {
             printf("%s ", call_stack[p_stack]->name);
             p_stack++;
@@ -324,40 +514,61 @@ static void print_cmd_help(SAPCommand *cmd) {
 
 /* ++++ functions of cmd_exec ++++ */
 
-int void_exec(SAPCommand* caller, int argc, char *argv[]) {
+int void_exec(SAPCommand* caller) {
     assert(caller != NULL);
 
     printf("The command %s haven't been allocate function\n", caller->name);
+
+    return 1;
+}
+
+int void_self_parse_exec(SAPCommand* caller, int argc, char *argv[]) {
+    assert(caller != NULL);
+    assert(argv != NULL);
+
+    printf("The command %s haven't been allocate function\n", caller->name);
+    printf("argc: %d\n", argc);
+    for (int i = 0; i < argc; i++) {
+        printf("argv[%d]: %s\n", i, argv[i]);
+    }
+
     return 1;
 }
 
 static int help_exec(SAPCommand* caller, int argc, char *argv[]) {
-    /* TODO: parse the argv to provide detailed help for subfunctions */
     /* verify the caller */
     assert(caller != NULL);
     assert(strcmp("help", caller->name) == 0);
-    SAPCommand *cmd2get_help = find_cmd_by_stack(&rootCmd, argc, argv, NULL);
+
+    int depth_cmd2get_help = 0;
+    SAPCommand *cmd2get_help = find_sap(&rootCmd, argc, argv, &depth_cmd2get_help);
+
     if (cmd2get_help == NULL) {
-        printf("Unknown command: %s. See '%s help'.\n", argv[0], rootCmd.name);
+        printf("Unknown command: %s. See '%s help'.\n", argv[depth_cmd2get_help], rootCmd.name);
         return -1;
     }
-    // printf("cmd2get_help in help_exec: %s\n", cmd2get_help->name);
-    print_cmd_help(cmd2get_help);
 
-    // if (rootCmd.short_desc != NULL) {
-    //     printf("%s\n", rootCmd.short_desc);
-    // }
-    // if (rootCmd.long_desc!= NULL) {
-    //     printf("%s\n", rootCmd.long_desc);
-    // }
+    print_cmd_help(cmd2get_help);
 
     return 0;
 }
 
 static int call_exec(SAPCommand* caller, int argc, char *argv[]) {
     assert(caller!= NULL);
-    // printf("call_exec: %s\n", argv[0]);
-    return caller->func(caller, argc, argv);
+
+    int ret = parse_flags(caller, argc, argv);
+
+    if (ret != 0) {
+        printf("Unknown option: %s\n", argv[ret]);
+        return -1;
+    }
+
+    if (caller->parse_by_self == 1) {
+        assert(caller->exec_self_parse != NULL);
+        return caller->exec_self_parse(caller, argc, argv);
+    }
+
+    return caller->exec(caller);
 }
 
 /* ---- functions of cmd_exec ---- */
@@ -365,7 +576,8 @@ static int call_exec(SAPCommand* caller, int argc, char *argv[]) {
 
 
 static void add_helpcmd() {
-    init_sap_command(&helpCmd, "help", "Display this help message", NULL, help_exec);
+    init_sap_command(&helpCmd, "help", "Display this help message", NULL, NULL);
+    set_cmd_self_parse(&helpCmd, help_exec);
     add_subcmd(&rootCmd, &helpCmd);
 }
 
@@ -373,7 +585,7 @@ static void add_helpcmd() {
 
 /* ++++ global frame functions that will be called by user ++++ */
 
-void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec func) {
+void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec exec) {
     assert(cmd!= NULL);
     assert(++cmd_cnt <= MAX_CMD_COUNT);
 
@@ -381,13 +593,27 @@ void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc,
     cmd->short_desc = short_desc;
     cmd->long_desc = long_desc;
     cmd->flag_cnt = 0;
-    cmd->func = (func == NULL)? void_exec: func;
+    cmd->parse_by_self = 0;
+    cmd->exec_self_parse = NULL;
+    cmd->exec = (exec == NULL)? void_exec: exec;
+    add_flag(cmd, &helpFlag);   /* add help flag to all sapcommand */
 
     init_tree_node(&cmd->tree_node);
 }
 
-void init_root_cmd(const char *name, const char *short_desc, const char *long_desc, CmdExec func) {
-    init_sap_command(&rootCmd, name, short_desc, long_desc, func);
+void init_root_cmd(const char *name, const char *short_desc, const char *long_desc, CmdExec exec) {
+    init_flag(&helpFlag, "help", 'h', "Display the help message", NULL);
+    init_sap_command(&rootCmd, name, short_desc, long_desc, exec);
+}
+
+void set_cmd_self_parse(SAPCommand *cmd, CmdExecWithArg self_parse_exec) {
+    assert(cmd != NULL);
+    cmd->parse_by_self = 1;
+    if (self_parse_exec == NULL) {
+        cmd->exec_self_parse = void_self_parse_exec;
+    } else {
+        cmd->exec_self_parse = self_parse_exec;
+    }
 }
 
 SAPCommand* add_subcmd(SAPCommand *parent, SAPCommand *child) {
@@ -405,11 +631,13 @@ int do_parse_subcmd(int argc, char *argv[]) {
     SAPCommand *cmd2run = NULL;
     int depth = 0;
 
+    Flag *cmd2help = (Flag *) malloc(sizeof(Flag));
+    init_flag(cmd2help, "cmd", 'c', "Specify the command to get help", NULL);
+    add_helpcmd();  /* add the subcommand help to root command */
+    add_default_flag(&helpCmd, cmd2help);
 
-    add_helpcmd(); /* add the subcommand help to root command */
+    cmd2run = find_sap_consider_flags(&rootCmd, argc, argv, &depth);
 
-    cmd2run = find_cmd_by_stack(&rootCmd, argc, argv, &depth);
-    // printf("cmd2run in do_parse_subcmd: %s\n", cmd2run->name);
     if (cmd2run != NULL) {
         return call_exec(cmd2run, argc - depth, argv + depth);
     } else { /* exit of unknown cmds */
@@ -419,6 +647,40 @@ int do_parse_subcmd(int argc, char *argv[]) {
 }
 
 void free_root_cmd() {
+    free(helpCmd.default_flag);
+
+    #define not_stack_select ((stack_select == 0)? 1: 0)
+    TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
+    int top[2] = {-1, -1};                  /* the top ptr of the two stack */
+    int stack_select = 0;                   /* select the available stack*/
+
+    /* push the root into stack */
+    stack[++top[stack_select]][stack_select] = &(rootCmd.tree_node);
+
+    while (top[stack_select] >= 0) {
+        TreeNode *stack_top = stack[top[stack_select]][stack_select];
+        SAPCommand *crt_cmd = node2cmd(stack_top);   /* current command */
+
+        for (int i = 0; i < crt_cmd->flag_cnt; i++) {
+            if (crt_cmd->flags[i]->type == multi_arg) {
+                free(crt_cmd->flags[i]->value);
+            }
+        }
+
+        for (int i = 0; i < stack_top->child_cnt; i++) {
+            /* push the subcmds into the other stack */
+            stack[++top[not_stack_select]][not_stack_select] = stack_top->children[i];
+        }
+
+        if (--top[stack_select] < 0) {
+            /* pop and judge whether the stack is empty */
+            stack_select = not_stack_select;    /* switch the stack */
+        }
+
+        /* ---- non-leaf node ---- */
+    #undef not_stack_select
+    }
+
     free_node_tree(&rootCmd.tree_node);
 }
 

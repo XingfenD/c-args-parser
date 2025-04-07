@@ -22,12 +22,24 @@
 
 
 
-/* ++++ macros defination ++++ */
+/* ++++ macros functions defination ++++ */
 
 #define to_container(ptr, type, member) ((type*)((char*)(ptr) - offsetof(type, member)))
 #define node2cmd(node_ptr) to_container(node_ptr, SAPCommand, tree_node)
 
-/* ---- macros defination ---- */
+/* ---- macros functions defination ---- */
+
+
+
+/* ++++ enum defination ++++ */
+
+typedef enum _FlagType {
+    single_arg = 0,
+    multi_arg = 1,
+    no_arg = 2
+} FlagType;
+
+/* ---- enum defination ---- */
 
 
 
@@ -37,7 +49,8 @@ typedef struct _Flag {
     const char *flag_name;
     char shorthand;
     const char *usage;
-    const char *value;
+    void *value;
+    FlagType type;
 } Flag;
 
 typedef struct _TreeNode {
@@ -52,7 +65,9 @@ typedef struct _SAPCommand {
     const char *short_desc;
     const char *long_desc;
     int flag_cnt;
-    int (*func)(struct _SAPCommand* caller, int argc, char *argv[]);
+    int parse_by_self;
+    int (*exec_self_parse)(struct _SAPCommand* caller, int argc, char *argv[]);
+    int (*exec)(struct _SAPCommand* caller);
     Flag *default_flag;
     Flag *flags[MAX_ARG_COUNT];
     TreeNode tree_node;
@@ -62,18 +77,17 @@ typedef struct _SAPCommand {
 
 
 
-typedef int (*CmdExec)(SAPCommand* caller, int argc, char *argv[]);
+typedef int (*CmdExec)(SAPCommand* caller);
+typedef int (*CmdExecWithArg)(SAPCommand* caller, int argc, char *argv[]);
 
 extern SAPCommand rootCmd;
 // extern int cmd_cnt;
 
 /* ++++ functions of Flags ++++ */
 
-void init_flag(Flag *flag, const char *flag_name, const char shorthand, const char *usage, const char *dft_val);
+void init_flag(Flag *flag, const char *flag_name, const char shorthand, const char *usage, void *dft_val);
 SAPCommand *add_flag(SAPCommand* cmd, Flag *flag);
 SAPCommand *add_default_flag(SAPCommand* cmd, Flag *flag);
-void get_flag_value(SAPCommand* caller, const char *flag_name, char *value);
-void get_flag_value_by_shorthand(SAPCommand* caller, char shorthand, char *value);
 
 /* ++++ functions of Flags ---- */
 
@@ -86,8 +100,8 @@ void get_flag_value_by_shorthand(SAPCommand* caller, char shorthand, char *value
 
 /* ++++ functions of cmd_exec ++++ */
 
-int void_exec(SAPCommand* caller, int argc, char *argv[]);
-// int help_exec(SAPCommand* caller, int argc, char *argv[]);
+int void_exec(SAPCommand* caller);
+int void_self_parse_exec(SAPCommand* caller, int argc, char *argv[]);
 
 /* ---- functions of cmd_exec ---- */
 
@@ -105,11 +119,11 @@ SAPCommand* get_parent_cmd(SAPCommand cmd);
 
 /* ++++ global frame functions will be called by user ++++ */
 
-void init_root_cmd(const char *name, const char *short_desc, const char *long_desc, CmdExec func);
-void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec func);
+void init_root_cmd(const char *name, const char *short_desc, const char *long_desc, CmdExec exec);
+void set_cmd_self_parse(SAPCommand *cmd, CmdExecWithArg self_parse_exec);
+void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec exec);
 SAPCommand* add_subcmd(SAPCommand *parent, SAPCommand *child);
 int do_parse_subcmd(int argc, char *argv[]);
-int do_parse_flags(SAPCommand *cmd, int argc, char *argv[]);
 void free_root_cmd();
 
 /* ---- global frame functions will be called by user ---- */
