@@ -46,6 +46,7 @@ void set_flag_type(Flag *flag, FlagType type) {
         printf("Warning: the flag %s is already set, but its type is changed to multi_arg\n", flag->flag_name);
         flag->value = NULL;
     }
+    /* NOTE: test the no_arg when value is set */
     flag->type = type;
 }
 
@@ -172,7 +173,7 @@ static int adjust_depth(TreeNode *parent, TreeNode *subtree_root) {
     return _adjust_depth(parent->depth, subtree_root);
 }
 
-static TreeNode* append_child(TreeNode *parent, TreeNode *child) {
+static TreeNode *append_child(TreeNode *parent, TreeNode *child) {
     if (parent == NULL ||
         child == NULL ||
         parent->child_cnt >= MAX_SUBCMD_COUNT
@@ -207,7 +208,7 @@ static void free_node_tree(TreeNode *root) {
 
 /* ++++ functions of SAPCommand ++++ */
 
-SAPCommand* get_parent_cmd(SAPCommand cmd) {
+SAPCommand *get_parent_cmd(SAPCommand cmd) {
     if (cmd.tree_node.parent == NULL) {
         return NULL;
     }
@@ -663,7 +664,7 @@ static void print_cmd_help(SAPCommand *cmd) {
 
 /* ++++ functions of cmd_exec ++++ */
 
-int void_exec(SAPCommand* caller) {
+int void_exec(SAPCommand *caller) {
     assert(caller != NULL);
 
     printf("The command %s haven't been allocate function\n", caller->name);
@@ -671,7 +672,7 @@ int void_exec(SAPCommand* caller) {
     return 1;
 }
 
-int void_self_parse_exec(SAPCommand* caller, int argc, char *argv[]) {
+int void_self_parse_exec(SAPCommand *caller, int argc, char *argv[]) {
     assert(caller != NULL);
     assert(argv != NULL);
 
@@ -684,7 +685,7 @@ int void_self_parse_exec(SAPCommand* caller, int argc, char *argv[]) {
     return 1;
 }
 
-static int help_exec(SAPCommand* caller, int argc, char *argv[]) {
+static int help_exec(SAPCommand *caller, int argc, char *argv[]) {
     /* verify the caller */
     assert(caller != NULL);
     assert(strcmp("help", caller->name) == 0);
@@ -702,7 +703,7 @@ static int help_exec(SAPCommand* caller, int argc, char *argv[]) {
     return 0;
 }
 
-static int call_exec(SAPCommand* caller, int argc, char *argv[]) {
+static int call_exec(SAPCommand *caller, int argc, char *argv[]) {
     assert(caller!= NULL);
 
     int ret = parse_flags(caller, argc, argv);

@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <scap.h>
 
-int root_exec(SAPCommand* caller) {
+int root_exec(SAPCommand *caller) {
     printf("root_exec: %s\n", caller->name);
     printf("root_exec default_flag: %s\n", caller->default_flag->flag_name);
     for (int i = 0; i < caller->flag_cnt; i++) {
@@ -32,7 +32,7 @@ int root_exec(SAPCommand* caller) {
     return 0;
 }
 
-int cmd1_exec(SAPCommand* caller) {
+int cmd1_exec(SAPCommand *caller) {
     printf("cmd1_exec: %s\n", caller->name);
     for (int i = 0; i < caller->flag_cnt; i++) {
         printf("cmd1_exec flag[%d]: %s, value: %s\n", i, caller->flags[i]->flag_name, (const char *) caller->flags[i]->value);
@@ -40,7 +40,7 @@ int cmd1_exec(SAPCommand* caller) {
     return 0;
 }
 
-int cmd2_exec(SAPCommand* caller) {
+int cmd2_exec(SAPCommand *caller) {
     printf("cmd2_exec: %s\n", caller->name);
     printf("cmd2_exec default_flag: %s\n", caller->default_flag->flag_name);
     for (int i = 0; i < caller->flag_cnt; i++) {
@@ -62,7 +62,7 @@ int cmd2_exec(SAPCommand* caller) {
     return 0;
 }
 
-int cmd3_exec(SAPCommand* caller, int argc, char *argv[]) {
+int cmd3_exec(SAPCommand *caller, int argc, char *argv[]) {
     printf("cmd3_exec caller->name: %s\n", caller->name);
     if (argc >= 1) {
         printf("cmd3_exec argv[0]: %s\n", argv[0]);
