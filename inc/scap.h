@@ -1,10 +1,14 @@
 /**
  * @file ./inc/scap.h
- * @brief 
+ * @brief a simple command line argument parser in c
  * @author Fendy (xingfen.star@gmail.com)
  * @version 1.0
  * @date 2025-03-30
  * @copyright Copyright (c) 2025
+ *
+ * this file contains the interfaces of the command line argument parser to be used.
+ * you can change the macros in the file scap.h to fit your needs.
+ * the macros are used to limit the number of commands, options, and subcommands.
  */
 
 #ifndef SCAP_ARG_PARSER_H
@@ -13,10 +17,10 @@
 
 /* ++++ configs ++++ */
 
-#define MAX_SUBCMD_COUNT 5
-#define MAX_CMD_DEPTH 5
-#define MAX_CMD_COUNT 15
-#define MAX_ARG_COUNT 10
+#define MAX_SUBCMD_COUNT 5  /* the max number of a command's subcommands */
+#define MAX_CMD_DEPTH 5     /* the max depth of command tree */
+#define MAX_CMD_COUNT 15    /* the max number of commands */
+#define MAX_OPT_COUNT 10    /* the max number of options in a single command or subcommand */
 
 /* ---- configs ---- */
 
@@ -69,7 +73,7 @@ typedef struct _SAPCommand {
     int (*exec_self_parse)(struct _SAPCommand* caller, int argc, char *argv[]);
     int (*exec)(struct _SAPCommand* caller);
     Flag *default_flag;
-    Flag *flags[MAX_ARG_COUNT];
+    Flag *flags[MAX_OPT_COUNT];
     TreeNode tree_node;
 } SAPCommand;
 
@@ -88,6 +92,9 @@ extern SAPCommand rootCmd;
 void init_flag(Flag *flag, const char *flag_name, const char shorthand, const char *usage, void *dft_val);
 SAPCommand *add_flag(SAPCommand* cmd, Flag *flag);
 SAPCommand *add_default_flag(SAPCommand* cmd, Flag *flag);
+void set_flag_type(Flag *flag, FlagType type);
+Flag *get_flag(SAPCommand *cmd, const char *flag_name);
+Flag *get_flag_by_shorthand(SAPCommand *cmd, char shorthand);
 
 /* ++++ functions of Flags ---- */
 

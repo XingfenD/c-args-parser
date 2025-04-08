@@ -1,6 +1,6 @@
 /**
  * @file ./lib/scap.c
- * @brief 
+ * @brief a simple command line argument parser in c
  * @author Fendy (xingfen.star@gmail.com)
  * @version 1.0
  * @date 2025-03-30
@@ -20,7 +20,14 @@ SAPCommand rootCmd;             /* the global root command */
 static SAPCommand helpCmd;      /* the help command */
 static int cmd_cnt = 0;         /* the number of commands */
 static Flag helpFlag;           /* the help flag */
-const static int IS_PROVIDED = 1;   /* the flag is provided */
+static const int IS_PROVIDED = 1;   /* the flag is provided */
+static enum {
+    normal = 0,
+    unknown_arg,
+    too_many_args,
+    too_few_args,
+    illegal_equal
+} parse_err = normal;
 
 /* ++++ functions of Flags ++++ */
 
@@ -35,13 +42,17 @@ void init_flag(Flag *flag, const char *flag_name, const char shorthand, const ch
 
 void set_flag_type(Flag *flag, FlagType type) {
     assert(flag != NULL);
+    if (flag->value != NULL && type == multi_arg) {
+        printf("Warning: the flag %s is already set, but its type is changed to multi_arg\n", flag->flag_name);
+        flag->value = NULL;
+    }
     flag->type = type;
 }
 
 SAPCommand *add_flag(SAPCommand *cmd, Flag *flag) {
     assert(cmd!= NULL);
     assert(flag!= NULL);
-    if (cmd->flag_cnt >= MAX_ARG_COUNT) {
+    if (cmd->flag_cnt >= MAX_OPT_COUNT) {
         return NULL;
     }
     cmd->flags[cmd->flag_cnt++] = flag;
@@ -56,6 +67,30 @@ SAPCommand *add_default_flag(SAPCommand *cmd, Flag *flag) {
     }
     cmd->default_flag = flag;
     return cmd;
+}
+
+Flag *get_flag(SAPCommand *cmd, const char *flag_name) {
+    assert(cmd != NULL);
+    assert(flag_name != NULL);
+
+    for (int i = 0; i < cmd->flag_cnt; i++) {
+        if (strcmp(cmd->flags[i]->flag_name, flag_name) == 0) {
+            return cmd->flags[i];
+        }
+    }
+    return NULL;
+}
+
+Flag *get_flag_by_shorthand(SAPCommand *cmd, char shorthand) {
+    assert(cmd != NULL);
+    assert(shorthand != '\0');
+
+    for (int i = 0; i < cmd->flag_cnt; i++) {
+        if (cmd->flags[i]->shorthand == shorthand) {
+            return cmd->flags[i];
+        }
+    }
+    return NULL;
 }
 
 /* ---- functions of Flags ----*/
@@ -96,7 +131,6 @@ static int get_max_depth(TreeNode *node) {
 //     if (node == NULL) {
 //         return;
 //     }
-
 //     node->depth += depth2add;
 //     for (int i = 0; i < node->child_cnt; i++) {
 //         recursive_adjust_depth(depth2add, node->children[i]);
@@ -185,6 +219,7 @@ static int get_child_cmd_cnt(SAPCommand *cmd) {
     if (cmd == NULL) {
         return -1;
     }
+
     return cmd->tree_node.child_cnt;
 }
 
@@ -362,88 +397,198 @@ static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int
     return NULL;
 }
 
-static int get_option_type(char *arg) {
+typedef enum _ArgType {
+    error_option = -1,
+    normal_arg = 0,
+    short_option = 1,
+    long_option = 2,
+    long_option_with_equal = 3,
+} ArgType;
+
+static ArgType get_option_type(char *arg) {
     if (
         (arg[0] == '-' && arg[1] == '\0') ||
+        (arg[0] == '-' && arg[1] != '-' && strlen(arg + 1) > 1) ||
+        (arg[0] == '-' && arg[1] == '-' && arg[2] == '=') ||
         (arg[0] == '-' && arg[1] == '-' && arg[2] == '\0')
     ) {
         /* if the arg is an error option */
-        return -1;
+        return error_option;
     } else if (arg[0] == '-' && arg[1] == '-') {    /* if the arg is a long option */
-        return 1;
+        if (strchr(arg, '=') != NULL) {
+            /* if the arg is a long option with '=' */
+            return long_option_with_equal;
+        }
+        return long_option;
     } else if (arg[0] == '-' && arg[1] != '\0') {   /* if the arg is a short option */
-        return 2;
+        return short_option;
     } else {    /* if the arg is a normal arg */
-        return 0;
+        return normal_arg;
     }
 }
 
+/**
+ * @brief parse the flags (options) in the command line arguments.
+ *
+ * this function iterates through the command line arguments, identifies the flags,
+ * and sets the values for the corresponding flags based on their types (no argument,
+ * single argument, or multiple arguments). If an unknown flag or an error option is
+ * encountered, it returns the index of that option in the argv array.
+ *
+ * @param cmd a pointer to the SAPCommand structure representing the command whose
+ *            flags are to be parsed.
+ * @param argc the number of command line arguments.
+ * @param argv the array of command line arguments.
+ * @return int returns 0 if the parsing is successful. If an error option is found,
+ *             it returns the index of that option in the argv array.
+ */
 static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
-    /* TODO: identify the help flag */
-    /* TODO: parse the default flag(recognize the arg without option in cmdline) */
+    /* Ensure that the input parameters are not null and argc is greater than 0 */
     assert(cmd != NULL);
     assert(argc > 0);
     assert(argv != NULL);
-    int flag_idxs[MAX_ARG_COUNT];
-    int flag_num = 0;
 
-    /* find the options */
-    for (int i = 1; i < argc; i++) {
-        switch (get_option_type(argv[i])) {
-        case -1:    /* if the arg is an error option */
-            return i;
-        case 1:     /* if the arg is a long option */
-        case 2:     /* if the arg is a short option */
-            flag_idxs[flag_num++] = i;
-        }
-    }   /* loop the argv */
+    int p_argv = 1;
+    int unused_arg[argc];
+    int unused_cnt = 0;
+    int i = 0;
 
-    for (int i = 0; i < flag_num; i++) {
-        int j = 0;
-        for (j = 0; j < cmd->flag_cnt; j++) {
-            if (
-                (argv[flag_idxs[i]][1] == '-' && strcmp(argv[flag_idxs[i]] + 2, cmd->flags[j]->flag_name)== 0) ||
-                (argv[flag_idxs[i]][1] != '-' && argv[flag_idxs[i]][1] == cmd->flags[j]->shorthand)
-            ) {
-                /* current argv: argv[flag_idxs[i]] */
-                /* current flag: cmd->flags[j] */
-                if (cmd->flags[j]->type == single_arg) {
-                    /* if the flag is not multi-arg */
-                    if (argv[flag_idxs[i]][1] == '-') {
-                        /* if the arg is a long option */
-                        cmd->flags[j]->value = argv[flag_idxs[i] + 1];
-                    } else {
-                        /* if the arg is a short option */
-                        cmd->flags[j]->value = argv[flag_idxs[i] + 1];
-                    }
-                    break;
-                } else if (cmd->flags[j]->type == no_arg) {
-                    /* if the flag is no-arg */
-                    cmd->flags[j]->value = (void *) &IS_PROVIDED;
-                } else if (cmd->flags[j]->type == multi_arg) {
-                    int arg_cnt = 0;
-                    char *arg_stack[argc];
-                    /* if the flag is multi-arg */
-                    for (int k = flag_idxs[i] + 1; k < argc; k++) {
-                        if (get_option_type(argv[k]) == 0) {
-                            arg_stack[arg_cnt++] = argv[k];
-                        } else {
-                            break;
+    while (p_argv < argc) {
+        #define CRT_ARGV argv[p_argv]
+        switch (get_option_type(CRT_ARGV))
+        {
+        case error_option:
+            parse_err = unknown_arg;
+            return p_argv;
+        case short_option:
+        case long_option:
+            #define CRT_FLAG cmd->flags[i]
+            #define CRT_FLAGNAME CRT_FLAG->flag_name
+            for (i = 0; i < cmd->flag_cnt; i++) {
+                if (
+                    (CRT_ARGV[1] == '-' && strcmp(CRT_FLAGNAME, CRT_ARGV + 2) == 0) ||
+                    (CRT_ARGV[1] != '-' && CRT_ARGV[1] == CRT_FLAG->shorthand)
+                ) {
+                    if (CRT_FLAG->type == single_arg) {
+                        CRT_FLAG->value = argv[++p_argv];
+                        break;
+                    } else if (CRT_FLAG->type == multi_arg) {
+                        int arg_cnt = 0;
+                        char *arg_stack[argc];
+                        while (++p_argv < argc) {
+                            if (get_option_type(argv[p_argv]) == normal_arg) {
+                                arg_stack[arg_cnt++] = argv[p_argv];
+                            } else {    /* if the next arg is an option */
+                                /* stop collecting when an option is encountered */
+                                break;
+                            }
                         }
+
+                        /* copy the collected arguments to the flag's value */
+                        if (arg_cnt == 0) {
+                            parse_err = too_few_args;
+                            return p_argv;
+                        }
+                        CRT_FLAG->value = (char **) malloc(sizeof(char *) * (arg_cnt + 1));
+                        for (int j = 0; j < arg_cnt; j++) {
+                            ((char **) CRT_FLAG->value)[j] = arg_stack[j];
+                        }
+                        /* add NULL to the end of the argument list as a terminator */
+                        ((char **) CRT_FLAG->value)[arg_cnt] = NULL;
+                        break;
+                    } else if (CRT_FLAG->type == no_arg) {
+                        /* if the flag is no-arg */
+                        /* set its value to the address of IS_PROVIDED */
+                        CRT_FLAG->value = (void *) &IS_PROVIDED;
+                        break;
+
                     }
-                    cmd->flags[j]->value = (char **) malloc(sizeof(char *) * (arg_cnt + 1));
-                    for (int i = 0; i < arg_cnt; i++) {
-                        ((char **) cmd->flags[j]->value)[i] = arg_stack[i];
-                    }
-                    ((char **) cmd->flags[j]->value)[arg_cnt] = NULL;
                 }
-                break;
             }
-        }   /* loop the flags */
-        if (j == cmd->flag_cnt) {
-            return flag_idxs[i];
+            #undef CRT_FLAGNAME
+            #undef CRT_FLAG
+
+            if (i == cmd->flag_cnt) {   /* unknown flag */
+                parse_err = unknown_arg;
+                return p_argv;
+            }
+
+            break;
+        case long_option_with_equal:
+            ;
+            char *p_equal_ch = strchr(CRT_ARGV, '=');
+            assert(p_equal_ch != NULL);
+
+            char *flag2parse = CRT_ARGV + 2;
+            int flag2parse_len = p_equal_ch - flag2parse; /* extract the flag name */
+
+            #define CRT_FLAG cmd->flags[i]
+            #define CRT_FLAGNAME CRT_FLAG->flag_name
+
+            /* iterate through all the flags of the current command */
+            for (i = 0; i < cmd->flag_cnt; i++) {
+                /* check if the flag name matches */
+                if (
+                    strncmp(flag2parse, CRT_FLAGNAME, flag2parse_len) == 0 &&
+                    strlen(CRT_FLAGNAME) == (size_t) (flag2parse_len)
+                ) {
+                    if (CRT_FLAG->type == single_arg) {
+                        /*  if it matches, set the value after the equal sign as the flag's value */
+                        CRT_FLAG->value = p_equal_ch + 1;
+                        break;  /* break the inner loop once a matching flag is found */
+                    } else if (CRT_FLAG->type == no_arg) {
+                        parse_err = illegal_equal;
+                        return p_argv;
+                    } else if (CRT_FLAG->type == multi_arg) {
+                        parse_err = illegal_equal;
+                        return p_argv;
+                    }
+                }
+            }
+
+            if (i == cmd->flag_cnt) {   /* unknown flag */
+                parse_err = unknown_arg;
+                return p_argv;
+            }
+
+            #undef CRR_FLAG
+            #undef CRT_FLAGNAME
+            break;
+        default:
+            /* if the arg is a normal arg */
+            unused_arg[unused_cnt++] = p_argv;
+            break;
         }
-    }   /* loop the flags in cmd line */
+
+        #undef CRT_ARGV
+
+        p_argv++;
+    }
+
+    /* if the unused args are more than 0 */
+    if (unused_cnt > 0) {
+        if (cmd->default_flag == NULL || cmd->default_flag->type == no_arg) {
+            /* if the default flag not set */
+            parse_err = too_many_args;
+            return unused_arg[0];
+        } else if (unused_cnt > 1 && cmd->default_flag->type == single_arg) {
+            /* if the default flag is single arg */
+            parse_err = too_many_args;
+            return unused_arg[1];
+        } else if (unused_cnt > 0 && cmd->default_flag->type == multi_arg) {
+            /* if the default flag is multi arg */
+            char **arg_stack = (char **) malloc(sizeof(char *) * (unused_cnt + 1));
+            for (int i = 0; i < unused_cnt; i++) {
+                arg_stack[i] = argv[unused_arg[i]];
+            }
+            arg_stack[unused_cnt] = NULL;
+            cmd->default_flag->value = arg_stack;
+        } else if (unused_cnt == 1 && cmd->default_flag->type == single_arg) {
+            /* if the default flag is single arg */
+            cmd->default_flag->value = argv[unused_arg[0]];
+        }
+    }
+
 
     return 0;
 }
@@ -489,16 +634,20 @@ static void print_cmd_help(SAPCommand *cmd) {
             if (cmd->flags[i]->shorthand != '\0') {
                 printf("-%c, ", cmd->flags[i]->shorthand);
             }
-            printf("--%s\t%s\n", cmd->flags[i]->flag_name, cmd->flags[i]->usage);
-            if (cmd->flags[i]->value != NULL) {
-                printf("    Default: %s\n", (const char *) cmd->flags[i]->value);
+            printf("--%s\t%s", cmd->flags[i]->flag_name, cmd->flags[i]->usage);
+            if (cmd->default_flag == cmd->flags[i]) {
+                printf("\t- default flag");
             }
+            printf("\n");
+            /* BUG: when options are provided, the default value will be changed */
+            // if (cmd->flags[i]->value != NULL) {
+            //     printf("    Default: %s\n", (const char *) cmd->flags[i]->value);
+            // }
         }
         printf("\n");
     }
 
     if (get_child_cmd_cnt(cmd) > 0) {
-
         printf("Use \"");
         while (call_stack[p_stack] != cmd) {
             printf("%s ", call_stack[p_stack]->name);
@@ -558,9 +707,32 @@ static int call_exec(SAPCommand* caller, int argc, char *argv[]) {
 
     int ret = parse_flags(caller, argc, argv);
 
-    if (ret != 0) {
-        printf("Unknown option: %s\n", argv[ret]);
+    if (ret != 0 && parse_err != normal) {
+        switch (parse_err) {
+        case unknown_arg:
+            printf("Argument unrecognized: %s\n", argv[ret]);
+            break;
+        case too_many_args:
+            printf("Too many arguments: %s\n", argv[ret]);
+            break;
+        case too_few_args:
+            printf("Too few arguments: %s\n", argv[ret]);
+            break;
+        case illegal_equal:
+            printf("Illegal option: %s\n", argv[ret]);
+            break;
+        default:
+            printf("Unknown error occurs on: %s\n", argv[ret]);
+            break;
+        }
+
         return -1;
+    }
+
+    if (helpFlag.value != NULL) {
+        /* if the help flag is provided */
+        print_cmd_help(caller);
+        return 0;
     }
 
     if (caller->parse_by_self == 1) {
@@ -578,6 +750,7 @@ static int call_exec(SAPCommand* caller, int argc, char *argv[]) {
 static void add_helpcmd() {
     init_sap_command(&helpCmd, "help", "Display this help message", NULL, NULL);
     set_cmd_self_parse(&helpCmd, help_exec);
+    set_flag_type(&helpFlag, no_arg);
     add_subcmd(&rootCmd, &helpCmd);
 }
 
@@ -594,6 +767,7 @@ void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc,
     cmd->long_desc = long_desc;
     cmd->flag_cnt = 0;
     cmd->parse_by_self = 0;
+    cmd->default_flag = NULL;
     cmd->exec_self_parse = NULL;
     cmd->exec = (exec == NULL)? void_exec: exec;
     add_flag(cmd, &helpFlag);   /* add help flag to all sapcommand */
@@ -631,10 +805,10 @@ int do_parse_subcmd(int argc, char *argv[]) {
     SAPCommand *cmd2run = NULL;
     int depth = 0;
 
-    Flag *cmd2help = (Flag *) malloc(sizeof(Flag));
-    init_flag(cmd2help, "cmd", 'c', "Specify the command to get help", NULL);
+    Flag *cmd2get_help = (Flag *) malloc(sizeof(Flag));
+    init_flag(cmd2get_help, "cmd", 'c', "Specify the command to get help", NULL);
     add_helpcmd();  /* add the subcommand help to root command */
-    add_default_flag(&helpCmd, cmd2help);
+    add_default_flag(&helpCmd, cmd2get_help);
 
     cmd2run = find_sap_consider_flags(&rootCmd, argc, argv, &depth);
 
@@ -647,8 +821,6 @@ int do_parse_subcmd(int argc, char *argv[]) {
 }
 
 void free_root_cmd() {
-    free(helpCmd.default_flag);
-
     #define not_stack_select ((stack_select == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
@@ -660,7 +832,6 @@ void free_root_cmd() {
     while (top[stack_select] >= 0) {
         TreeNode *stack_top = stack[top[stack_select]][stack_select];
         SAPCommand *crt_cmd = node2cmd(stack_top);   /* current command */
-
         for (int i = 0; i < crt_cmd->flag_cnt; i++) {
             if (crt_cmd->flags[i]->type == multi_arg) {
                 free(crt_cmd->flags[i]->value);
@@ -680,7 +851,7 @@ void free_root_cmd() {
         /* ---- non-leaf node ---- */
     #undef not_stack_select
     }
-
+    free(helpCmd.default_flag);
     free_node_tree(&rootCmd.tree_node);
 }
 
