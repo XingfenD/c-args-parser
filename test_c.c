@@ -20,6 +20,9 @@ int exec_without_args(SAPCommand *caller) {
             printf("%s flag[%d]: %s, single_arg, value: %s\n", caller->name, i, caller->flags[i]->flag_name, (const char *) caller->flags[i]->value);
         } else if (caller->flags[i]->type == multi_arg) {
             printf("%s flag[%d]: %s, multi_arg, address: %p, value:\n", caller->name, i, caller->flags[i]->flag_name, caller->flags[i]->value);
+            if (caller->flags[i]->value == NULL) {
+                continue;
+            }
             for (int j = 0; ; j++) {
                 if (((char **) caller->flags[i]->value)[j] == NULL) {
                     printf("\n");

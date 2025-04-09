@@ -486,6 +486,10 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
                     (CRT_ARGV[1] != '-' && CRT_ARGV[1] == CRT_FLAG->shorthand)
                 ) {
                     if (CRT_FLAG->type == single_arg) {
+                        if (p_argv + 1 >= argc || get_option_type(argv[p_argv + 1]) != normal_arg) {
+                            parse_err = too_few_args;
+                            return p_argv;
+                        }
                         CRT_FLAG->value = argv[++p_argv];
                         break;
                     } else if (CRT_FLAG->type == multi_arg) {
@@ -503,7 +507,7 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
                         /* copy the collected arguments to the flag's value */
                         if (arg_cnt == 0) {
                             parse_err = too_few_args;
-                            return p_argv;
+                            return p_argv - 1;
                         }
                         CRT_FLAG->value = (char **) malloc(sizeof(char *) * (arg_cnt + 1));
                         for (int j = 0; j < arg_cnt; j++) {
@@ -513,7 +517,6 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
                         ((char **) CRT_FLAG->value)[arg_cnt] = NULL;
                         break;
                     } else if (CRT_FLAG->type == no_arg) {
-                        /* BUG: when the no_arg flag is given as the last argument, the value will not be set */
                         /* if the flag is no-arg */
                         /* set its value to the address of IS_PROVIDED */
                         CRT_FLAG->value = (void *) &IS_PROVIDED;
@@ -594,7 +597,6 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
             return unused_arg[1];
         } else if (unused_cnt > 0 && cmd->default_flag->type == multi_arg) {
             /* if the default flag is multi arg */
-            /* BUG: not return too_few_arguments when no arg is given */
             char **arg_stack = (char **) malloc(sizeof(char *) * (unused_cnt + 1));
             for (int i = 0; i < unused_cnt; i++) {
                 arg_stack[i] = argv[unused_arg[i]];
@@ -607,6 +609,12 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
         }
     }
 
+
+    // if (cmd->default_flag != NULL && cmd->default_flag->type == multi_arg && cmd->default_flag->value == NULL) {
+    //     /* if the default flag is multi arg and the value is NULL */
+    //     parse_err = too_few_args;
+    //     return 1;
+    // }
 
     return 0;
 }
