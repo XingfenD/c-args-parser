@@ -1,6 +1,6 @@
 /**
  * @file test_c.c
- * @brief 
+ * @brief used to test scap.c
  * @author Fendy (xingfen.star@gmail.com)
  * @version 1.0
  * @date 2025-03-30
@@ -62,12 +62,20 @@ int main(int argc, char *argv[]) {
     Flag root_n;
     init_flag(&root_n, "root_n", 'n', "This is long description for root_n", NULL);
     set_flag_type(&root_n, no_arg);
-    add_flag(&rootCmd, &root_n);
+    add_default_flag(&rootCmd, &root_n);
 
     SAPCommand sub1;
     init_sap_command(&sub1, "sub1", "This is short description for sub1", "This is long description for sub1", NULL);
     set_cmd_self_parse(&sub1, exec_with_args);
     add_subcmd(&rootCmd, &sub1);
+
+    SAPCommand sub2;
+    init_sap_command(&sub2, "sub2", "This is short description for sub2", "This is long description for sub2", NULL);
+    add_subcmd(&rootCmd, &sub2);
+
+    Flag persist_flag;
+    init_flag(&persist_flag, "persist_flag", 'p', "This is long description for persist_flag", "default_value for persist_flag");
+    add_persist_flag(&sub1, &persist_flag);
 
     int ret = do_parse_subcmd(argc, argv);
 

@@ -66,6 +66,43 @@ SAPCommand *add_default_flag(SAPCommand *cmd, Flag *flag) {
     return cmd;
 }
 
+int add_persist_flag(SAPCommand *cmd, Flag *flag) {
+    assert(cmd != NULL);
+    assert(flag != NULL);
+
+    #define not_stack_select ((stack_select == 0)? 1: 0)
+    TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
+    int top[2] = {-1, -1};                  /* the top ptr of the two stack */
+    int stack_select = 0;                   /* select the available stack*/
+    int fail_cnt = 0;
+
+    /* push the root into stack */
+    stack[++top[stack_select]][stack_select] = &(rootCmd.tree_node);
+
+    while (top[stack_select] >= 0) {
+        TreeNode *stack_top = stack[top[stack_select]][stack_select];
+        SAPCommand *crt_cmd = node2cmd(stack_top);   /* current command */
+        if (add_flag(crt_cmd, flag) == NULL) {       /* add the flag to the current command */
+            fail_cnt++;
+        }
+
+        for (int i = 0; i < stack_top->child_cnt; i++) {
+            /* push the subcmds into the other stack */
+            stack[++top[not_stack_select]][not_stack_select] = stack_top->children[i];
+        }
+
+        if (--top[stack_select] < 0) {
+            /* pop and judge whether the stack is empty */
+            stack_select = not_stack_select;    /* switch the stack */
+        }
+
+        /* ---- non-leaf node ---- */
+    }
+    #undef not_stack_select
+
+    return fail_cnt;
+}
+
 void set_flag_type(Flag *flag, FlagType type) {
     /* ensure that the incoming flag pointer is not NULL */
     assert(flag != NULL);
@@ -609,7 +646,10 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
         }
     }
 
-
+    if (cmd->default_flag != NULL && cmd->default_flag->type == no_arg) {
+        /* if the default flag is no arg and the value is NULL */
+        cmd->default_flag->value = (void *) &IS_PROVIDED;
+    }
     // if (cmd->default_flag != NULL && cmd->default_flag->type == multi_arg && cmd->default_flag->value == NULL) {
     //     /* if the default flag is multi arg and the value is NULL */
     //     parse_err = too_few_args;
@@ -618,7 +658,6 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
 
     return 0;
 }
-
 
 static void print_cmd_help(SAPCommand *cmd) {
     SAPCommand *call_stack[MAX_CMD_DEPTH];
@@ -773,12 +812,64 @@ static int call_exec(SAPCommand *caller, int argc, char *argv[]) {
 
 
 
+/* ++++ functions for initialization ++++ */
+
 static void add_helpcmd() {
     init_sap_command(&helpCmd, "help", "Display this help message", NULL, NULL);
     set_cmd_self_parse(&helpCmd, help_exec);
     set_flag_type(&helpFlag, no_arg);
     add_subcmd(&rootCmd, &helpCmd);
 }
+
+static void check_shorthand() {
+    #define not_stack_select ((stack_select == 0)? 1: 0)
+    TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
+    int top[2] = {-1, -1};                  /* the top ptr of the two stack */
+    int stack_select = 0;                   /* select the available stack*/
+
+    /* push the root into stack */
+    stack[++top[stack_select]][stack_select] = &(rootCmd.tree_node);
+
+    while (top[stack_select] >= 0) {
+        TreeNode *stack_top = stack[top[stack_select]][stack_select];
+        SAPCommand *crt_cmd = node2cmd(stack_top);   /* current command */
+        SAPCommand *call_stack[MAX_CMD_DEPTH];
+        get_cmd_stack(crt_cmd, call_stack);
+        Flag *ch_occupied[26] = {0};
+        for (int i = 0; i < crt_cmd->flag_cnt; i++) {
+            if (crt_cmd->flags[i]->shorthand!= '\0') {
+                int char_idx = crt_cmd->flags[i]->shorthand - 'a';
+                if (ch_occupied[char_idx] != NULL) {
+                    int j = 0;
+                    printf("In command: ");
+                    while (call_stack[j] != crt_cmd) {
+                        printf("%s ", call_stack[j]->name);
+                        j++;
+                    }
+                    printf("%s\n", crt_cmd->name);
+                    printf("Warning: shorthand '%c' is already occupied by %s\n", crt_cmd->flags[i]->shorthand, ch_occupied[char_idx]->flag_name);
+                } else {
+                    ch_occupied[char_idx] = crt_cmd->flags[i];
+                }
+            }
+        }
+
+        for (int i = 0; i < stack_top->child_cnt; i++) {
+            /* push the subcmds into the other stack */
+            stack[++top[not_stack_select]][not_stack_select] = stack_top->children[i];
+        }
+
+        if (--top[stack_select] < 0) {
+            /* pop and judge whether the stack is empty */
+            stack_select = not_stack_select;    /* switch the stack */
+        }
+
+        /* ---- non-leaf node ---- */
+    }
+    #undef not_stack_select
+}
+
+/* ---- functions for initialization ----*/
 
 
 
@@ -846,12 +937,10 @@ int do_parse_subcmd(int argc, char *argv[]) {
     /* allocate memory for a flag to specify the command to get help */
     /* the helpCmd's default flag */
     Flag *cmd2get_help = (Flag *) malloc(sizeof(Flag));
-    /* initialize the flag */
-    init_flag(cmd2get_help, "cmd", 'c', "Specify the command to get help", NULL);
-    /* add the help subcommand to the root command */
-    add_helpcmd();
-    /* add the flag to the help command as the default flag */
-    add_default_flag(&helpCmd, cmd2get_help);
+    init_flag(cmd2get_help, "cmd", 'c', "Specify the command to get help", NULL);   /* initialize the flag */
+    add_helpcmd();  /* add the help subcommand to the root command */
+    add_default_flag(&helpCmd, cmd2get_help);   /* add the flag to the help command as the default flag */
+    check_shorthand();  /* check the duplicate shorthand */
 
     /* find the command to execute considering flags */
     cmd2run = find_sap_consider_flags(&rootCmd, argc, argv, &depth);
@@ -897,8 +986,8 @@ void free_root_cmd() {
         }
 
         /* ---- non-leaf node ---- */
-    #undef not_stack_select
     }
+    #undef not_stack_select
     free(helpCmd.default_flag);
     free_node_tree(&rootCmd.tree_node);
 }

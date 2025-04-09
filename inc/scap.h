@@ -131,6 +131,19 @@ SAPCommand *add_flag(SAPCommand *cmd, Flag *flag);
 SAPCommand *add_default_flag(SAPCommand *cmd, Flag *flag);
 
 /**
+ * @brief add a persist flag to the specified command and its all progeny
+ *
+ * @param cmd the root command of the subcommand tree
+ * @param flag the persist flag to be added
+ * @return int the number of failed addtions, 0 means all succeed
+ *
+ * @note this command should be called after all subcommands are added to the root command(of the subcommand tree)
+ */
+int add_persist_flag(SAPCommand *cmd, Flag *flag);
+
+// int add_flag(SAPCommand *cmd, Flag *flag, unsigned char mode);
+
+/**
  * @brief set the type of a flag.
  *
  * this function is used to set the type of a specified flag to the given type.

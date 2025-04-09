@@ -11,9 +11,10 @@
 Todo:
 
 - [ ] Parse multiple no_arg flags in a single option. Eg. -rf
-- [ ] Permit that the flag don't have an shorthand.
-- [ ] Use the framework to parse arguments in help command.
-- [ ] Check the run result of default no_arg flags.
+- [x] Permit that the flag don't have an shorthand.
+- [x] Check the run result of default no_arg flags.
+- [ ] Merge the `add_flag` function family together, and add a mode argument.
+- [ ] Add dependency check for flags
 
 
 ### Scppap.hpp&scppap.cpp - unfinished
@@ -71,6 +72,8 @@ int void_self_parse_exec(SAPCommand *caller, int argc, char *argv[]);
 ### Detailed Introduction
 
 #### `SAPCommand` Structure
+
+The prototype:
 
 ```c
 typedef struct _SAPCommand {
@@ -172,6 +175,8 @@ SAPCommand *add_subcmd(SAPCommand *parent, SAPCommand *child);
 
 #### `do_parse_subcmd` Function
 
+The prototype
+
 ```
 /**
  * @brief parse and execute subcommands based on command-line arguments
@@ -191,6 +196,8 @@ SAPCommand *add_subcmd(SAPCommand *parent, SAPCommand *child);
 
 #### `free_root_cmd` Function
 
+The prototype
+
 ```c
 /**
  * @brief free the memory allocated for the root command and its subcommands
@@ -206,6 +213,8 @@ void free_root_cmd();
 ​	free the memory used by the framework, this function should be called before the program exit.
 
 #### `Flag` Structure
+
+The prototype
 
 ```c
 typedef struct _Flag {
@@ -276,6 +285,51 @@ The prototype:
 SAPCommand *add_flag(SAPCommand *cmd, Flag *flag);
 ```
 ​	This function is used to add a flag to the specified SAPCommand structure. If the command already contains the maximum number of flags, the function returns NULL. Otherwise, it adds the flag to the command's flag list and returns a pointer to the command. The arguments cmd and flag can't be NULL, and have a wide action scope.
+
+#### `add_default_flag` Function
+
+The prototype:
+
+```c
+/**
+ * @brief add a default flag to the specified command.
+ *
+ * this function is used to add a default flag to the specified SAPCommand structure.
+ * if the command already contains the maximum number of flags, the function returns NULL.
+ * otherwise, it adds the flag to the command's flag list and set the field $default_flag, then a pointer to the command.
+ *
+ * @param cmd a pointer to the SAPCommand structure to which the flag will be added.
+ * @param flag a pointer to the flag to be added.
+ * @return SAPCommand* if the addition is successful, returns a pointer to the SAPCommand structure;
+ *                    if the command already contains the maximum number of flags, returns NULL.
+ */
+SAPCommand *add_default_flag(SAPCommand *cmd, Flag *flag);
+```
+
+​	This function is used to add a default flag to the specified command. A**default flag** is the flag that receives the arguments which are not allocated to other commands. For example a command `ex` has two flags: `-m` and `-d`, `-d` is the default `single_arg` flag, and `-m` is `single_arg`, too. In command `ex dddd -m mmmm`, argument `dddd` will be allocated to `-d` flag.
+
+​	If two default flags are added to the same `SAPCommand`, the latter one will over-write the former one.
+
+​	If a no_arg flag is added as a default flag, it will be regarded to be provided defaultly, although it seems to be meaningless.
+
+#### `add_persist_flag` Function
+
+The prototype:
+
+```c
+/**
+ * @brief add a persist flag to the specified command and its all progeny
+ *
+ * @param cmd the root command of the subcommand tree
+ * @param flag the persist flag to be added
+ * @return int the number of failed addtions, 0 means all succeed
+ *
+ * @note this command should be called after all subcommands are added to the root command(of the subcommand tree)
+ */
+int add_persist_flag(SAPCommand *cmd, Flag *flag);
+```
+
+​	This function is used to add the flag to all the descendants of the given `cmd`. This command should be called after all subcommands are added to the root command(of the subcommand tree).
 
 #### `set_flag_type` Function
 
@@ -360,7 +414,7 @@ int exec_without_args(SAPCommand *caller) {
             printf("%s flag[%d]: %s, single_arg, value: %s\n", caller->name, i, caller->flags[i]->flag_name, (const char *) caller->flags[i]->value);
         } else if (caller->flags[i]->type == multi_arg) {
             printf("%s flag[%d]: %s, multi_arg, address: %p, value:\n", caller->name, i, caller->flags[i]->flag_name, caller->flags[i]->value);
-            if (caller->flags[i]->value != NULL) {
+            if (caller->flags[i]->value == NULL) {
                 continue;
             }
             for (int j = 0; ; j++) {
@@ -409,12 +463,21 @@ int main(int argc, char *argv[]) {
     set_cmd_self_parse(&sub1, exec_with_args);
     add_subcmd(&rootCmd, &sub1);
 
+    SAPCommand sub2;
+    init_sap_command(&sub2, "sub2", "This is short description for sub2", "This is long description for sub2", NULL);
+    add_subcmd(&rootCmd, &sub2);
+
+    Flag persist_flag;
+    init_flag(&persist_flag, "persist_flag", 'p', "This is long description for persist_flag", "default_value for persist_flag");
+    add_persist_flag(&sub1, &persist_flag);
+
     int ret = do_parse_subcmd(argc, argv);
 
     free_root_cmd();
 
     return ret;
 }
+
 ```
 
 ​	Some examples for input and output is given below:
@@ -422,12 +485,13 @@ int main(int argc, char *argv[]) {
 ```cmd
 $ ./example_c -s arg_s -n -m arg1 arg2 arg3
 Current Command Name: example
-The default_flag name: root_m
-example flag[0]: help, no_arg, isNULL: 1
+The default_flag name: root_n
+example flag[0]: help, no_arg, isGiven: 0
 example flag[1]: root_s, single_arg, value: arg_s
-example flag[2]: root_m, multi_arg, address: 0x1567058e0, value:
+example flag[2]: root_m, multi_arg, address: 0x12a605da0, value:
 arg1 arg2 arg3
-example flag[3]: root_n, no_arg, isNULL: 0
+example flag[3]: root_n, no_arg, isGiven: 1
+example flag[4]: persist_flag, single_arg, value: default_value for persist_flag
 
 $ ./example_c sub1 arg1 arg2 arg3
 Current Command Name: sub1
@@ -446,13 +510,15 @@ Usage: example [command] [options]
 
 Available Commands:
   sub1  This is short description for sub1
+  sub2  This is short description for sub2
   help  Display this help message
 
 Flags:
   -h, --help    Display the help message
   -s, --root_s  This is long description for root_s
-  -m, --root_m  This is long description for root_m     - default flag
-  -n, --root_n  This is long description for root_n
+  -m, --root_m  This is long description for root_m
+  -n, --root_n  This is long description for root_n     - default flag
+  -p, --persist_flag    This is long description for persist_flag
 
 Use "example [command] --help" for more help
 ```
