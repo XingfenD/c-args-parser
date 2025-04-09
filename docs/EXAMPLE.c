@@ -1,9 +1,9 @@
 /**
- * @file test_c.c
- * @brief 
+ * @file ./docs/EXAMPLE.c
+ * @brief the example of using scap framework
  * @author Fendy (xingfen.star@gmail.com)
  * @version 1.0
- * @date 2025-03-30
+ * @date 2025-05-09
  * @copyright Copyright (c) 2025
  */
 

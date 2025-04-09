@@ -40,58 +40,73 @@ void init_flag(Flag *flag, const char *flag_name, const char shorthand, const ch
     flag->type = single_arg;
 }
 
-void set_flag_type(Flag *flag, FlagType type) {
-    assert(flag != NULL);
-    if (flag->value != NULL && type == multi_arg) {
-        printf("Warning: the flag %s is already set, but its type is changed to multi_arg\n", flag->flag_name);
-        flag->value = NULL;
-    }
-    /* NOTE: test the no_arg when value is set */
-    flag->type = type;
-}
-
 SAPCommand *add_flag(SAPCommand *cmd, Flag *flag) {
+    /* ensure that the incoming command pointer and flag pointer are not NULL */
     assert(cmd!= NULL);
     assert(flag!= NULL);
+    /* check if the number of flags in the command has reached the maximum value */
     if (cmd->flag_cnt >= MAX_OPT_COUNT) {
+        /* if the maximum value is reached, return NULL */
         return NULL;
     }
+    /* add the flag to the command's flag list and increment the flag counter */
     cmd->flags[cmd->flag_cnt++] = flag;
+    /* return the command pointer */
     return cmd;
 }
 
 SAPCommand *add_default_flag(SAPCommand *cmd, Flag *flag) {
-    assert(cmd!= NULL);
-    assert(flag!= NULL);
+    /* call the add_flag function and check the return value */
     if (add_flag(cmd, flag) == NULL) {
+        /* if the add_flag function returns NULL, return NULL */
         return NULL;
     }
+    /* set the default flag of the command and return the command pointer */
     cmd->default_flag = flag;
     return cmd;
 }
 
-Flag *get_flag(SAPCommand *cmd, const char *flag_name) {
-    assert(cmd != NULL);
-    assert(flag_name != NULL);
+void set_flag_type(Flag *flag, FlagType type) {
+    /* ensure that the incoming flag pointer is not NULL */
+    assert(flag != NULL);
+    /* if the flag already has a value and the new type is multi-argument */
+    if (flag->value != NULL && type == multi_arg) {
+        /* print a warning message */
+        printf("Warning: the flag %s is already set, but its type is changed to multi_arg\n", flag->flag_name);
+        /* set the flag's value to NULL */
+        flag->value = NULL;
+    }
+    /* NOTE: test the no_arg when value is set */
+    /* set the flag's type */
+    flag->type = type;
+}
 
+Flag *get_flag(SAPCommand *cmd, const char *flag_name) {
+    assert(cmd != NULL);       /* ensure the command is not NULL. */
+    assert(flag_name != NULL); /* ensure the flag name is not NULL. */
+
+    /* iterate through all flags in the command */
     for (int i = 0; i < cmd->flag_cnt; i++) {
+        /* compare the flag name with the current flag */
         if (strcmp(cmd->flags[i]->flag_name, flag_name) == 0) {
-            return cmd->flags[i];
+            return cmd->flags[i]; // Return the matching flag.
         }
     }
-    return NULL;
+    return NULL; /* return NULL if no matching flag is found */
 }
 
 Flag *get_flag_by_shorthand(SAPCommand *cmd, char shorthand) {
-    assert(cmd != NULL);
-    assert(shorthand != '\0');
+    assert(cmd != NULL);       /* ensure the command is not NULL */
+    assert(shorthand != '\0'); /* ensure the shorthand character is valid */
 
+    /* iterate through all flags in the command */
     for (int i = 0; i < cmd->flag_cnt; i++) {
+        /* compare the shorthand character with the current flag */
         if (cmd->flags[i]->shorthand == shorthand) {
-            return cmd->flags[i];
+            return cmd->flags[i]; /* return the matching flag */
         }
     }
-    return NULL;
+    return NULL; /* return NULL if no matching flag is found */
 }
 
 /* ---- functions of Flags ----*/
@@ -498,6 +513,7 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
                         ((char **) CRT_FLAG->value)[arg_cnt] = NULL;
                         break;
                     } else if (CRT_FLAG->type == no_arg) {
+                        /* BUG: when the no_arg flag is given as the last argument, the value will not be set */
                         /* if the flag is no-arg */
                         /* set its value to the address of IS_PROVIDED */
                         CRT_FLAG->value = (void *) &IS_PROVIDED;
@@ -578,6 +594,7 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
             return unused_arg[1];
         } else if (unused_cnt > 0 && cmd->default_flag->type == multi_arg) {
             /* if the default flag is multi arg */
+            /* BUG: not return too_few_arguments when no arg is given */
             char **arg_stack = (char **) malloc(sizeof(char *) * (unused_cnt + 1));
             for (int i = 0; i < unused_cnt; i++) {
                 arg_stack[i] = argv[unused_arg[i]];
@@ -706,6 +723,11 @@ static int help_exec(SAPCommand *caller, int argc, char *argv[]) {
 static int call_exec(SAPCommand *caller, int argc, char *argv[]) {
     assert(caller!= NULL);
 
+    if (caller->parse_by_self == 1) {
+        assert(caller->exec_self_parse != NULL);
+        return caller->exec_self_parse(caller, argc, argv);
+    }
+
     int ret = parse_flags(caller, argc, argv);
 
     if (ret != 0 && parse_err != normal) {
@@ -736,11 +758,6 @@ static int call_exec(SAPCommand *caller, int argc, char *argv[]) {
         return 0;
     }
 
-    if (caller->parse_by_self == 1) {
-        assert(caller->exec_self_parse != NULL);
-        return caller->exec_self_parse(caller, argc, argv);
-    }
-
     return caller->exec(caller);
 }
 
@@ -759,42 +776,52 @@ static void add_helpcmd() {
 
 /* ++++ global frame functions that will be called by user ++++ */
 
-void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec exec) {
-    assert(cmd!= NULL);
-    assert(++cmd_cnt <= MAX_CMD_COUNT);
-
-    cmd->name = name;
-    cmd->short_desc = short_desc;
-    cmd->long_desc = long_desc;
-    cmd->flag_cnt = 0;
-    cmd->parse_by_self = 0;
-    cmd->default_flag = NULL;
-    cmd->exec_self_parse = NULL;
-    cmd->exec = (exec == NULL)? void_exec: exec;
-    add_flag(cmd, &helpFlag);   /* add help flag to all sapcommand */
-
-    init_tree_node(&cmd->tree_node);
-}
-
 void init_root_cmd(const char *name, const char *short_desc, const char *long_desc, CmdExec exec) {
+    /* init the help flag */
     init_flag(&helpFlag, "help", 'h', "Display the help message", NULL);
+    /* call init_sap_cmd to init root cmd */
     init_sap_command(&rootCmd, name, short_desc, long_desc, exec);
 }
 
+void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec exec) {
+    assert(cmd != NULL);                /* ensure the command pointer is not null */
+    assert(++cmd_cnt <= MAX_CMD_COUNT); /* ensure the command count does not exceed the maximum limit */
+
+    cmd->name = name;                   /* set the command name */
+    cmd->short_desc = short_desc;       /* set the short description of the command */
+    cmd->long_desc = long_desc;         /* set the long description of the command */
+    cmd->flag_cnt = 0;                  /* initialize the flag count to 0 */
+    cmd->parse_by_self = 0;             /* set parse_by_self to 0 (default parse by the framework) */
+    cmd->default_flag = NULL;           /* initialize the default flag to null */
+    cmd->exec_self_parse = NULL;        /* initialize the self-parse execution function to null */
+    cmd->exec = (exec == NULL) ? void_exec : exec; /* set the execution function, use void_exec if null */
+    add_flag(cmd, &helpFlag);           /* add the help flag to the command */
+
+    init_tree_node(&cmd->tree_node);    /* initialize the tree node for the command */
+}
+
 void set_cmd_self_parse(SAPCommand *cmd, CmdExecWithArg self_parse_exec) {
+    /* ensure the incoming command pointer is not null */
     assert(cmd != NULL);
+    /* set the command to parse arguments by itself */
     cmd->parse_by_self = 1;
+    /* if the provided self-parse execution function is null */
     if (self_parse_exec == NULL) {
+        /* use the default void self-parse execution function */
         cmd->exec_self_parse = void_self_parse_exec;
     } else {
+        /* use the provided self-parse execution function */
         cmd->exec_self_parse = self_parse_exec;
     }
 }
 
 SAPCommand* add_subcmd(SAPCommand *parent, SAPCommand *child) {
+    /* ensure the parent command pointer is not null */
     assert(parent!= NULL);
+    /* ensure the child command pointer is not null */
     assert(child!= NULL);
 
+    /* attempt to append the child node to the parent node */
     if (append_child(&parent->tree_node, &child->tree_node) == NULL) {
         return NULL;
     }
@@ -803,20 +830,32 @@ SAPCommand* add_subcmd(SAPCommand *parent, SAPCommand *child) {
 }
 
 int do_parse_subcmd(int argc, char *argv[]) {
+    /* initialize a pointer to the command to be executed */
     SAPCommand *cmd2run = NULL;
+    /* initialize the depth counter */
     int depth = 0;
 
+    /* allocate memory for a flag to specify the command to get help */
+    /* the helpCmd's default flag */
     Flag *cmd2get_help = (Flag *) malloc(sizeof(Flag));
+    /* initialize the flag */
     init_flag(cmd2get_help, "cmd", 'c', "Specify the command to get help", NULL);
-    add_helpcmd();  /* add the subcommand help to root command */
+    /* add the help subcommand to the root command */
+    add_helpcmd();
+    /* add the flag to the help command as the default flag */
     add_default_flag(&helpCmd, cmd2get_help);
 
+    /* find the command to execute considering flags */
     cmd2run = find_sap_consider_flags(&rootCmd, argc, argv, &depth);
 
+    /* if the command to execute is found */
     if (cmd2run != NULL) {
+        /* execute the command and return its result */
         return call_exec(cmd2run, argc - depth, argv + depth);
-    } else { /* exit of unknown cmds */
+    } else {
+        /* print an error message for unknown commands */
         printf("Unknown command: %s. See '%s help'.\n", argv[depth], rootCmd.name);
+        /* return -1 to indicate an unknown command */
         return -1;
     }
 }
