@@ -1,6 +1,6 @@
-# SCAP/SCPPAP - Simple C/C++ Agument Parser
+# SCAP - Simple C Agument Parser
 
-​	SCAP/SCPPAP is an command-line argument parsing framework in C and C++ (C++ version is waiting for implementation).
+​	SCAP is an command-line argument parsing framework in C.
 
 ## Project Status
 
@@ -15,9 +15,6 @@ Todo:
 - [x] Check the run result of default no_arg flags.
 - [ ] Merge the `add_flag` function family together, and add a mode argument.
 - [ ] Add dependency check for flags
-
-
-### Scppap.hpp&scppap.cpp - unfinished
 
 ## Introduction to SCAP
 
@@ -389,7 +386,7 @@ Flag *get_flag_by_shorthand(SAPCommand *cmd, char shorthand);
 
 ### Apply SCAP To Your Project
 
-​	Just download the scap.h scap.c or scppap.hpp scppap.cpp, include the head file compile the source file like your own library. The example program is given in [EXAMPLE.c](EXAMPLE.c)
+​	Just download the scap.h scap.c, include the head file compile the source file like your own library. The example program is given in [EXAMPLE.c](EXAMPLE.c)
 
 ```c
 /**

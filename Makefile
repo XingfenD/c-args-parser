@@ -13,6 +13,7 @@ CPP_EXEC = $(BUILD_DIR)/test_cpp
 C_EXEC = $(BUILD_DIR)/test_c
 
 # build targets
+all: test_c
 
 c_gen: CC = $(CC_c)
 c_gen: $(C_EXEC)
