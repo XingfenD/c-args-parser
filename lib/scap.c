@@ -16,10 +16,10 @@
 #include <scap.h>
 
 
-SAPCommand rootCmd;             /* the global root command */
-static SAPCommand helpCmd;      /* the help command */
-static int cmd_cnt = 0;         /* the number of commands */
-static Flag helpFlag;           /* the help flag */
+SAPCommand rootCmd;                 /* the global root command */
+static SAPCommand helpCmd;          /* the help command */
+static int g_cmd_cnt = 0;           /* the number of commands */
+static Flag helpFlag;               /* the help flag */
 static const int IS_PROVIDED = 1;   /* the flag is provided */
 static enum {
     normal = 0,
@@ -166,7 +166,7 @@ static void init_tree_node(TreeNode *node) {
 
 static int get_max_depth(TreeNode *node) {
     int max_depth = 0;
-    if (node == NULL) { /* this branch won't be excuted */
+    if (node == NULL) { /* this branch won't be executed */
         return max_depth;
     }
 
@@ -208,7 +208,7 @@ static void non_recursive_adjust_depth(int depth2add, TreeNode *node) {
     }
 }
 
-static int _adjust_depth(int depth2add, TreeNode *subtree_root) {
+static int adjust_depth_with_add(int depth2add, TreeNode *subtree_root) {
     if (subtree_root == NULL) {
         return 0;
     }
@@ -222,7 +222,7 @@ static int _adjust_depth(int depth2add, TreeNode *subtree_root) {
 }
 
 static int adjust_depth(TreeNode *parent, TreeNode *subtree_root) {
-    return _adjust_depth(parent->depth, subtree_root);
+    return adjust_depth_with_add(parent->depth, subtree_root);
 }
 
 static TreeNode *append_child(TreeNode *parent, TreeNode *child) {
@@ -290,6 +290,21 @@ static void get_cmd_stack(SAPCommand *cmd, SAPCommand *call_stack[MAX_SUBCMD_COU
     }
 }
 
+/**
+ * @brief find the appropriate SAPCommand based on command names, considering default flags.
+ *
+ * this function traverses the command tree using a breadth-first search approach
+ * to find the matching command. When an unknown command is encountered, it checks
+ * if the parent command has a default flag. If so, it returns the parent command
+ * to allow the unknown argument to be processed as value of the default flag.
+ *
+ * @param[in] cmd           - a pointer to the root SAPCommand to start searching from.
+ * @param[in] cmd_cnt       - the number of command names in the cmd_names array.
+ * @param[in] cmd_names     - an array of command name strings to match against.
+ * @param[out] out_depth    - a pointer to store the depth of the found command (can be NULL).
+ * @return SAPCommand* returns a pointer to the matching command, or the parent
+ *                    command if it has a default flag, or NULL if no match is found.
+ */
 static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
     /* NOTE: the first command in cmd_names may not be $cmd */
     #define not_stack_select (((stack_select) == 0)? 1: 0)
@@ -374,6 +389,20 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *c
     return NULL;
 }
 
+/**
+ * @brief find the appropriate SAPCommand based on command names.
+ *
+ * this function traverses the command tree using a breadth-first search approach
+ * to find the matching command. It performs strict command matching without
+ * considering default flags, returning NULL when an unknown command is encountered.
+ *
+ * @param[in] cmd           - a pointer to the root SAPCommand to start searching from.
+ * @param[in] cmd_cnt       - the number of command names in the cmd_names array.
+ * @param[in] cmd_names     - an array of command name strings to match against.
+ * @param[out] out_depth    - a pointer to store the depth of the found command (can be NULL).
+ * @return SAPCommand* returns a pointer to the matching command, or NULL if no
+ *                    exact match is found.
+ */
 static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
     /* NOTE: the first command in cmd_names may not be $cmd */
     #define not_stack_select (((stack_select) == 0)? 1: 0)
@@ -450,7 +479,7 @@ static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int
     return NULL;
 }
 
-typedef enum _ArgType {
+typedef enum {
     error_option = -1,
     normal_arg = 0,
     short_option = 1,
@@ -571,13 +600,12 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
             }
 
             break;
-        case long_option_with_equal:
-            ;
+        case long_option_with_equal: {
             char *p_equal_ch = strchr(CRT_ARGV, '=');
             assert(p_equal_ch != NULL);
 
             char *flag2parse = CRT_ARGV + 2;
-            int flag2parse_len = p_equal_ch - flag2parse; /* extract the flag name */
+            long flag2parse_len = p_equal_ch - flag2parse; /* extract the flag name */
 
             #define CRT_FLAG cmd->flags[i]
             #define CRT_FLAGNAME CRT_FLAG->flag_name
@@ -593,10 +621,7 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
                         /*  if it matches, set the value after the equal sign as the flag's value */
                         CRT_FLAG->value = p_equal_ch + 1;
                         break;  /* break the inner loop once a matching flag is found */
-                    } else if (CRT_FLAG->type == no_arg) {
-                        parse_err = illegal_equal;
-                        return p_argv;
-                    } else if (CRT_FLAG->type == multi_arg) {
+                    } else if (CRT_FLAG->type == no_arg || CRT_FLAG->type == multi_arg) {
                         parse_err = illegal_equal;
                         return p_argv;
                     }
@@ -611,6 +636,8 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
             #undef CRR_FLAG
             #undef CRT_FLAGNAME
             break;
+        }
+
         default:
             /* if the arg is a normal arg */
             unused_arg[unused_cnt++] = p_argv;
@@ -632,11 +659,11 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
             /* if the default flag is single arg */
             parse_err = too_many_args;
             return unused_arg[1];
-        } else if (unused_cnt > 0 && cmd->default_flag->type == multi_arg) {
+        } else if (cmd->default_flag->type == multi_arg) {
             /* if the default flag is multi arg */
             char **arg_stack = (char **) malloc(sizeof(char *) * (unused_cnt + 1));
-            for (int i = 0; i < unused_cnt; i++) {
-                arg_stack[i] = argv[unused_arg[i]];
+            for (int ii = 0; ii < unused_cnt; ii++) {
+                arg_stack[ii] = argv[unused_arg[ii]];
             }
             arg_stack[unused_cnt] = NULL;
             cmd->default_flag->value = arg_stack;
@@ -659,7 +686,7 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
     return 0;
 }
 
-static void print_cmd_help(SAPCommand *cmd) {
+void print_cmd_help(SAPCommand *cmd) {
     SAPCommand *call_stack[MAX_CMD_DEPTH];
     int p_stack = 0;
 
@@ -884,7 +911,8 @@ void init_root_cmd(const char *name, const char *short_desc, const char *long_de
 
 void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec exec) {
     assert(cmd != NULL);                /* ensure the command pointer is not null */
-    assert(++cmd_cnt <= MAX_CMD_COUNT); /* ensure the command count does not exceed the maximum limit */
+    ++g_cmd_cnt;
+    assert(g_cmd_cnt <= MAX_CMD_COUNT); /* ensure the command count does not exceed the maximum limit */
 
     cmd->name = name;                   /* set the command name */
     cmd->short_desc = short_desc;       /* set the short description of the command */
@@ -940,6 +968,7 @@ int do_parse_subcmd(int argc, char *argv[]) {
     init_flag(cmd2get_help, "cmd", 'c', "Specify the command to get help", NULL);   /* initialize the flag */
 
     add_helpcmd();                              /* add the help subcommand to the root command */
+    // set_flag_type(cmd2get_help, multi_arg);
     add_default_flag(&helpCmd, cmd2get_help);   /* add the flag to the help command as the default flag */
     check_shorthand();                          /* check the duplicate shorthand */
 

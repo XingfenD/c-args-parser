@@ -5,21 +5,21 @@
 The prototype:
 
 ```c
-typedef struct _SAPCommand {
+typedef struct SAPCommand_ {
     const char *name;           /* the name of the command */
     const char *short_desc;     /* the short description of the command */
     const char *long_desc;      /* the long description of the command */
     int flag_cnt;               /* the number of flags(options) in the command */
     int parse_by_self;          /* whether the cmd_exec parses argc&argv itself (default 0) */
-    int (*exec_self_parse)(struct _SAPCommand *caller, int argc, char *argv[]); /* be called when parse_by_self is to set 1 */
-    int (*exec)(struct _SAPCommand *caller);    /* be called when parse_by_self is to set 0 */
+    int (*exec_self_parse)(struct SAPCommand_ *caller, int argc, char *argv[]); /* be called when parse_by_self is to set 1 */
+    int (*exec)(struct SAPCommand_ *caller);    /* be called when parse_by_self is to set 0 */
     Flag *default_flag;         /* the default flag, unassigned arguments will be assigned default_flag's argument */
     Flag *flags[MAX_OPT_COUNT]; /* the flags of this SAPCommand */
     TreeNode tree_node;         /* the tree node of this command, used to manage the command tree */
 } SAPCommand;
 ```
 
-​	All the fields in SAPCommand will be set by given functions, setting(writing) the fields by yourself is not permitted.
+​	All the fields in SAPCommand should be set by given functions, setting(writing) the fields by yourself is not permitted (All the fields are private).
 
 ​	The below fields are permitted to read:
 
@@ -146,7 +146,7 @@ void free_root_cmd();
 The prototype
 
 ```c
-typedef struct _Flag {
+typedef struct {
     const char *flag_name;  /* both the flag name and the long option */
     char shorthand;         /* the short option */
     const char *usage;      /* the usage description of the flag */
@@ -155,7 +155,7 @@ typedef struct _Flag {
 } Flag;
 ```
 
-​	All the fields in Flag will be set by given functions, setting(writing) the fields by yourself is not permitted.
+​	All the fields in Flag should be set by given functions, setting(writing) the fields by yourself is not permitted (All the fields are private).
 
 ​	The below fields are permitted to read:
 
@@ -283,7 +283,7 @@ void set_flag_type(Flag *flag, FlagType type);
 ​	FlagType is an enum, whose definition is :
 
 ```c
-typedef enum _FlagType {
+typedef enum {
     single_arg = 0,     /* the flag(option) receives a single argument */
     multi_arg = 1,      /* the flag(option) receives multiple arguments */
     no_arg = 2          /* the flag(option) doesn't receive any argument */
