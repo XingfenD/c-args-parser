@@ -686,7 +686,7 @@ static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
     return 0;
 }
 
-static void print_cmd_help(SAPCommand *cmd) {
+void print_cmd_help(SAPCommand *cmd) {
     SAPCommand *call_stack[MAX_CMD_DEPTH];
     int p_stack = 0;
 
@@ -968,6 +968,7 @@ int do_parse_subcmd(int argc, char *argv[]) {
     init_flag(cmd2get_help, "cmd", 'c', "Specify the command to get help", NULL);   /* initialize the flag */
 
     add_helpcmd();                              /* add the help subcommand to the root command */
+    // set_flag_type(cmd2get_help, multi_arg);
     add_default_flag(&helpCmd, cmd2get_help);   /* add the flag to the help command as the default flag */
     check_shorthand();                          /* check the duplicate shorthand */
 

@@ -37,7 +37,7 @@
 
 /* ++++ enum definition ++++ */
 
-typedef enum FlagType_ {
+typedef enum {
     single_arg = 0,     /* the flag(option) receives a single argument */
     multi_arg = 1,      /* the flag(option) receives multiple arguments */
     no_arg = 2          /* the flag(option) doesn't receive any argument */
@@ -49,11 +49,11 @@ typedef enum FlagType_ {
 
 /* ++++ structs definition ++++ */
 
-typedef struct Flag_ {
+typedef struct {
     const char *flag_name;  /* both the flag name and the long option */
     char shorthand;         /* the short option */
     const char *usage;      /* the usage description of the flag */
-    void *value;            /* the default value and parsed value of this flag */
+    void *value;            /* the default value and parsed value of this flag (detailed introduction is in interfaces.md) */
     FlagType type;          /* the flag type in (single_arg, multi_arg, no_arg) */
 } Flag;
 
@@ -195,7 +195,7 @@ int void_self_parse_exec(SAPCommand *caller, int argc, char *argv[]);
 
 // void get_cmd_stack(SAPCommand *cmd, SAPCommand *call_stack[MAX_SUBCMD_COUNT]);
 SAPCommand *get_parent_cmd(SAPCommand cmd);
-// void print_cmd_help(SAPCommand *cmd);
+void print_cmd_help(SAPCommand *cmd);
 
 /* ---- functions of SAPCommand ---- */
 

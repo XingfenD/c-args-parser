@@ -46,6 +46,15 @@ int exec_with_args(SAPCommand *caller, int argc, char *argv[]) {
     return 0;
 }
 
+int exec_sub2(SAPCommand *caller) {
+    printf("Current Command Name: %s\n", caller->name);
+    Flag *persist_flag = get_flag(caller, "persist_flag");
+    if (persist_flag != NULL) {
+        printf("persist_flag value: %s\n", (const char *) persist_flag->value);
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
 
     init_root_cmd("example", "This is short description for example", "This is long description for example", exec_without_args);
@@ -70,7 +79,7 @@ int main(int argc, char *argv[]) {
     add_subcmd(&rootCmd, &sub1);
 
     SAPCommand sub2;
-    init_sap_command(&sub2, "sub2", "This is short description for sub2", "This is long description for sub2", NULL);
+    init_sap_command(&sub2, "sub2", "This is short description for sub2", "This is long description for sub2", exec_sub2);
     add_subcmd(&rootCmd, &sub2);
 
     Flag persist_flag;
