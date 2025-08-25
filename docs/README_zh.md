@@ -31,7 +31,7 @@
 
 ## 快速入门
 
-### 1. 安装
+### 1. 编译测试样例
 
 ```bash
 git clone https://github.com/yourusername/c-args-parser.git
@@ -139,6 +139,10 @@ set_cmd_self_parse(&special_cmd, custom_parser);
 - [ ] 组合短选项 (如 `-rvf`)
 - [ ] 选项依赖检查
 - [ ] 交互式帮助系统
+
+🐞 **已知漏洞**
+
+- help命令的flag不生效
 
 ## 许可证
 

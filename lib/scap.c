@@ -23,10 +23,10 @@ static Flag helpFlag;           /* the help flag */
 static const int IS_PROVIDED = 1;   /* the flag is provided */
 static enum {
     normal = 0,
-    unknown_arg,
-    too_many_args,
-    too_few_args,
-    illegal_equal
+    unknown_arg = 1,
+    too_many_args = 2,
+    too_few_args = 3,
+    illegal_equal = 4
 } parse_err = normal;
 
 /* ++++ functions of Flags ++++ */
@@ -42,8 +42,8 @@ void init_flag(Flag *flag, const char *flag_name, const char shorthand, const ch
 
 SAPCommand *add_flag(SAPCommand *cmd, Flag *flag) {
     /* ensure that the incoming command pointer and flag pointer are not NULL */
-    assert(cmd!= NULL);
-    assert(flag!= NULL);
+    assert(cmd != NULL);
+    assert(flag != NULL);
     /* check if the number of flags in the command has reached the maximum value */
     if (cmd->flag_cnt >= MAX_OPT_COUNT) {
         /* if the maximum value is reached, return NULL */
@@ -70,7 +70,7 @@ int add_persist_flag(SAPCommand *cmd, Flag *flag) {
     assert(cmd != NULL);
     assert(flag != NULL);
 
-    #define not_stack_select ((stack_select == 0)? 1: 0)
+    #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
     int stack_select = 0;                   /* select the available stack*/
@@ -292,7 +292,7 @@ static void get_cmd_stack(SAPCommand *cmd, SAPCommand *call_stack[MAX_SUBCMD_COU
 
 static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
     /* NOTE: the first command in cmd_names may not be $cmd */
-    #define not_stack_select ((stack_select == 0)? 1: 0)
+    #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     TreeNode *stack_top = NULL;
     SAPCommand *crt_cmd = NULL;
@@ -376,7 +376,7 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *c
 
 static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
     /* NOTE: the first command in cmd_names may not be $cmd */
-    #define not_stack_select ((stack_select == 0)? 1: 0)
+    #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
     int stack_select = 0;                   /* select the available stack*/
@@ -822,7 +822,7 @@ static void add_helpcmd() {
 }
 
 static void check_shorthand() {
-    #define not_stack_select ((stack_select == 0)? 1: 0)
+    #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
     int stack_select = 0;                   /* select the available stack*/
@@ -938,9 +938,10 @@ int do_parse_subcmd(int argc, char *argv[]) {
     /* the helpCmd's default flag */
     Flag *cmd2get_help = (Flag *) malloc(sizeof(Flag));
     init_flag(cmd2get_help, "cmd", 'c', "Specify the command to get help", NULL);   /* initialize the flag */
-    add_helpcmd();  /* add the help subcommand to the root command */
+
+    add_helpcmd();                              /* add the help subcommand to the root command */
     add_default_flag(&helpCmd, cmd2get_help);   /* add the flag to the help command as the default flag */
-    check_shorthand();  /* check the duplicate shorthand */
+    check_shorthand();                          /* check the duplicate shorthand */
 
     /* find the command to execute considering flags */
     cmd2run = find_sap_consider_flags(&rootCmd, argc, argv, &depth);
@@ -958,7 +959,7 @@ int do_parse_subcmd(int argc, char *argv[]) {
 }
 
 void free_root_cmd() {
-    #define not_stack_select ((stack_select == 0)? 1: 0)
+    #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
     int stack_select = 0;                   /* select the available stack*/
@@ -969,6 +970,7 @@ void free_root_cmd() {
     while (top[stack_select] >= 0) {
         TreeNode *stack_top = stack[top[stack_select]][stack_select];
         SAPCommand *crt_cmd = node2cmd(stack_top);   /* current command */
+
         for (int i = 0; i < crt_cmd->flag_cnt; i++) {
             if (crt_cmd->flags[i]->type == multi_arg) {
                 free(crt_cmd->flags[i]->value);

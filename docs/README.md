@@ -31,7 +31,7 @@ Build nested command structures with multiple subcommand levels
 
 ## Quick Start
 
-### 1. Installation
+### 1. Compile the test executable file
 
 ```bash
 git clone https://github.com/yourusername/c-args-parser.git
@@ -139,6 +139,10 @@ Core parsing functionality stable
 - [ ] Combined short flags (e.g. `-rvf`)
 - [ ] Option dependency checks
 - [ ] Interactive help system
+
+🐞 **Known Bugs**
+
+- The flags of help subcommand does not take effect
 
 ## License
 
