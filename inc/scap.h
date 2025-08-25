@@ -26,30 +26,30 @@
 
 
 
-/* ++++ macros functions defination ++++ */
+/* ++++ macros functions definition ++++ */
 
 #define to_container(ptr, type, member) ((type*)((char*)(ptr) - offsetof(type, member)))
 #define node2cmd(node_ptr) to_container(node_ptr, SAPCommand, tree_node)
 
-/* ---- macros functions defination ---- */
+/* ---- macros functions definition ---- */
 
 
 
-/* ++++ enum defination ++++ */
+/* ++++ enum definition ++++ */
 
-typedef enum _FlagType {
+typedef enum FlagType_ {
     single_arg = 0,     /* the flag(option) receives a single argument */
     multi_arg = 1,      /* the flag(option) receives multiple arguments */
     no_arg = 2          /* the flag(option) doesn't receive any argument */
 } FlagType;
 
-/* ---- enum defination ---- */
+/* ---- enum definition ---- */
 
 
 
-/* ++++ structs defination ++++ */
+/* ++++ structs definition ++++ */
 
-typedef struct _Flag {
+typedef struct Flag_ {
     const char *flag_name;  /* both the flag name and the long option */
     char shorthand;         /* the short option */
     const char *usage;      /* the usage description of the flag */
@@ -57,27 +57,27 @@ typedef struct _Flag {
     FlagType type;          /* the flag type in (single_arg, multi_arg, no_arg) */
 } Flag;
 
-typedef struct _TreeNode {
+typedef struct TreeNode_ {
     int child_cnt;
     int depth;
-    struct _TreeNode *parent;
-    struct _TreeNode **children;
+    struct TreeNode_ *parent;
+    struct TreeNode_ **children;
 } TreeNode;
 
-typedef struct _SAPCommand {
+typedef struct SAPCommand_ {
     const char *name;           /* the name of the command */
     const char *short_desc;     /* the short description of the command */
     const char *long_desc;      /* the long description of the command */
     int flag_cnt;               /* the number of flags(options) in the command */
     int parse_by_self;          /* whether the cmd_exec parses argc&argv itself (default 0) */
-    int (*exec_self_parse)(struct _SAPCommand *caller, int argc, char *argv[]); /* be called when parse_by_self is to set 1 */
-    int (*exec)(struct _SAPCommand *caller);    /* be called when parse_by_self is to set 0 */
+    int (*exec_self_parse)(struct SAPCommand_ *caller, int argc, char *argv[]); /* be called when parse_by_self is to set 1 */
+    int (*exec)(struct SAPCommand_ *caller);    /* be called when parse_by_self is to set 0 */
     Flag *default_flag;         /* the default flag, unassigned arguments will be assigned default_flag's argument */
     Flag *flags[MAX_OPT_COUNT]; /* the flags of this SAPCommand */
     TreeNode tree_node;         /* the tree node of this command, used to manage the command tree */
 } SAPCommand;
 
-/* ---- structs defination ---- */
+/* ---- structs definition ---- */
 
 
 
@@ -85,7 +85,7 @@ typedef int (*CmdExec)(SAPCommand *caller);
 typedef int (*CmdExecWithArg)(SAPCommand *caller, int argc, char *argv[]);
 
 extern SAPCommand rootCmd;
-// extern int cmd_cnt;
+// extern int g_cmd_cnt;
 
 /* ++++ functions of Flags ++++ */
 
@@ -94,13 +94,13 @@ extern SAPCommand rootCmd;
  *
  * this function is used to initialize a flag structure, setting the flag's name, shorthand, usage description, default value, and type.
  *
- * @param[in] flag A pointer to the flag structure to be initialized.
- * @param[in] flag_name The name of the flag.
- * @param[in] shorthand The shorthand of the flag.
- * @param[in] usage The usage description of the flag.
- * @param[in] dft_val The default value of the flag.
+ * @param[in] flag      - A pointer to the flag structure to be initialized.
+ * @param[in] flag_name - The name of the flag.
+ * @param[in] shorthand - The shorthand of the flag.
+ * @param[in] usage     - The usage description of the flag.
+ * @param[in] dft_val   - The default value of the flag.
  */
-void init_flag(Flag *flag, const char *flag_name, const char shorthand, const char *usage, void *dft_val);
+void init_flag(Flag *flag, const char *flag_name, char shorthand, const char *usage, void *dft_val);
 
 /**
  * @brief add a flag to the specified command.
@@ -109,10 +109,10 @@ void init_flag(Flag *flag, const char *flag_name, const char shorthand, const ch
  * if the command already contains the maximum number of flags, the function returns NULL.
  * otherwise, it adds the flag to the command's flag list and returns a pointer to the command.
  *
- * @param cmd a pointer to the SAPCommand structure to which the flag will be added.
- * @param flag a pointer to the flag to be added.
- * @return SAPCommand* if the addition is successful, returns a pointer to the SAPCommand structure;
- *                    if the command already contains the maximum number of flags, returns NULL.
+ * @param[in] cmd       - a pointer to the SAPCommand structure to which the flag will be added.
+ * @param[in] flag      - a pointer to the flag to be added.
+ * @return SAPCommand*  - if the addition is successful, returns a pointer to the SAPCommand structure;
+ *                        if the command already contains the maximum number of flags, returns NULL.
  */
 SAPCommand *add_flag(SAPCommand *cmd, Flag *flag);
 
@@ -123,19 +123,19 @@ SAPCommand *add_flag(SAPCommand *cmd, Flag *flag);
  * if the command already contains the maximum number of flags, the function returns NULL.
  * otherwise, it adds the flag to the command's flag list and set the field $default_flag, then a pointer to the command.
  *
- * @param cmd a pointer to the SAPCommand structure to which the flag will be added.
- * @param flag a pointer to the flag to be added.
- * @return SAPCommand* if the addition is successful, returns a pointer to the SAPCommand structure;
- *                    if the command already contains the maximum number of flags, returns NULL.
+ * @param cmd           - a pointer to the SAPCommand structure to which the flag will be added.
+ * @param flag          - a pointer to the flag to be added.
+ * @return SAPCommand*  - if the addition is successful, returns a pointer to the SAPCommand structure;
+ *                        if the command already contains the maximum number of flags, returns NULL.
  */
 SAPCommand *add_default_flag(SAPCommand *cmd, Flag *flag);
 
 /**
  * @brief add a persist flag to the specified command and its all progeny
  *
- * @param cmd the root command of the subcommand tree
- * @param flag the persist flag to be added
- * @return int the number of failed addtions, 0 means all succeed
+ * @param cmd   - the root command of the subcommand tree
+ * @param flag  - the persist flag to be added
+ * @return int  - the number of failed additions, 0 means all succeed
  *
  * @note this command should be called after all subcommands are added to the root command(of the subcommand tree)
  */
@@ -150,26 +150,26 @@ int add_persist_flag(SAPCommand *cmd, Flag *flag);
  * if the flag already has a value and the new type is a multi-argument type,
  * it will print a warning message and set the flag's value to NULL.
  *
- * @param flag A pointer to the flag whose type is to be set.
- * @param type The type to set the flag to.
+ * @param[in] flag  - A pointer to the flag whose type is to be set.
+ * @param[in] type  - The type to set the flag to.
  */
 void set_flag_type(Flag *flag, FlagType type);
 
 /**
  * @brief retrieve a flag by its name from a given command.
  *
- * @param cmd pointer to the SAPCommand structure.
- * @param flag_name the name of the flag to search for.
- * @return Flag* pointer to the matching flag, or NULL if not found.
+ * @param[in] cmd       - pointer to the SAPCommand structure.
+ * @param[in] flag_name - the name of the flag to search for.
+ * @return Flag*        - pointer to the matching flag, or NULL if not found.
  */
 Flag *get_flag(SAPCommand *cmd, const char *flag_name);
 
 /**
  * @brief retrieve a flag by its shorthand character from a given command.
  *
- * @param cmd pointer to the SAPCommand structure.
- * @param shorthand the shorthand character of the flag to search for.
- * @return Flag* pointer to the matching flag, or NULL if not found.
+ * @param[in] cmd       - pointer to the SAPCommand structure.
+ * @param[in] shorthand - the shorthand character of the flag to search for.
+ * @return Flag*        - pointer to the matching flag, or NULL if not found.
  */
 Flag *get_flag_by_shorthand(SAPCommand *cmd, char shorthand);
 
@@ -206,10 +206,10 @@ SAPCommand *get_parent_cmd(SAPCommand cmd);
 /**
  * @brief initialize the root sapcommand
  *
- * @param name name of the root command
- * @param short_desc short description of the root command
- * @param long_desc long description of the root command
- * @param exec function pointer for the root command execution
+ * @param[in] name       - name of the root command
+ * @param[in] short_desc - short description of the root command
+ * @param[in] long_desc  - long description of the root command
+ * @param[in] exec       - function pointer for the root command execution
  *
  * this function will initialize the help flag and then call init_sap_command to initialize the root command
  * consequently, call this function before calling any init_sap_command functions
@@ -219,11 +219,11 @@ void init_root_cmd(const char *name, const char *short_desc, const char *long_de
 /**
  * @brief initialize a sapcommand structure
  *
- * @param cmd pointer to the sapcommand structure to initialize
- * @param name name of the command
- * @param short_desc short description of the command
- * @param long_desc long description of the command
- * @param exec function pointer for the command execution
+ * @param[in] cmd           - pointer to the sapcommand structure to initialize
+ * @param[in] name          - name of the command
+ * @param[in] short_desc    - short description of the command
+ * @param[in] long_desc     - long description of the command
+ * @param[in] exec          - function pointer for the command execution
  */
 void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc, const char *long_desc, CmdExec exec);
 
@@ -233,8 +233,8 @@ void init_sap_command(SAPCommand *cmd, const char *name, const char *short_desc,
  * this function sets whether a command should parse command-line arguments by itself and specifies the corresponding self-parse execution function.
  * if the provided self-parse execution function is null, it uses the default void self-parse execution function.
  *
- * @param cmd pointer to the SAPCommand structure representing the command to be set
- * @param self_parse_exec pointer to the self-parse execution function which takes a SAPCommand pointer and command-line arguments
+ * @param[in] cmd               - pointer to the SAPCommand structure representing the command to be set
+ * @param[in] self_parse_exec   - pointer to the self-parse execution function which takes a SAPCommand pointer and command-line arguments
  */
 void set_cmd_self_parse(SAPCommand *cmd, CmdExecWithArg self_parse_exec);
 
@@ -245,9 +245,9 @@ void set_cmd_self_parse(SAPCommand *cmd, CmdExecWithArg self_parse_exec);
  * it ensures that both the parent and child commands are valid and attempts to append the child to the parent's tree node.
  * if the operation fails(exceed the MAX_SUBCMD_COUNT), it returns null; otherwise, it returns the parent command.
  *
- * @param parent pointer to the parent SAPCommand structure
- * @param child pointer to the child SAPCommand structure
- * @return pointer to the parent SAPCommand structure if successful, null otherwise
+ * @param[in] parent    - pointer to the parent SAPCommand structure
+ * @param[in] child     - pointer to the child SAPCommand structure
+ * @return SAPCommand*  - pointer to the parent SAPCommand structure if successful, null otherwise
  */
 SAPCommand *add_subcmd(SAPCommand *parent, SAPCommand *child);
 
@@ -258,9 +258,9 @@ SAPCommand *add_subcmd(SAPCommand *parent, SAPCommand *child);
  * it adds a help flag to the help command and then searches for the target subcommand.
  * if the subcommand is found, it executes the subcommand; otherwise, it prints an error message.
  *
- * @param argc the number of command-line arguments
- * @param argv the array of command-line arguments
- * @return the return value of the executed subcommand or -1 if the command is unknown
+ * @param[in] argc  - the number of command-line arguments
+ * @param[in] argv  - the array of command-line arguments
+ * @return int      - the return value of the executed subcommand or -1 if the command is unknown
  */
 int do_parse_subcmd(int argc, char *argv[]);
 
