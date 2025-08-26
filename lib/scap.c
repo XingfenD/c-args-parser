@@ -305,7 +305,6 @@ static void get_cmd_stack(SAPCommand *cmd, SAPCommand *call_stack[MAX_SUBCMD_COU
  *                    command if it has a default flag, or NULL if no match is found.
  */
 static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], int *out_depth) {
-    /* NOTE: the first command in cmd_names may not be $cmd */
     #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     TreeNode *stack_top = NULL;
@@ -403,7 +402,6 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], i
  *                    exact match is found.
  */
 static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_depth) {
-    /* NOTE: the first command in cmd_names may not be $cmd */
     #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
@@ -413,8 +411,14 @@ static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_depth) 
     assert(cmd != NULL);
     assert(cmd_names != NULL);
 
-    /* push the root into stack */
-    stack[++top[stack_select]][stack_select] = &(cmd->tree_node);
+    if (strcmp(cmd_names[0], cmd->name) != 0) {
+        for (int i = 0; i < cmd->tree_node.child_cnt; i++) {
+            stack[++top[stack_select]][stack_select] = cmd->tree_node.children[i];
+        }
+    } else {
+        /* push the root into stack */
+        stack[++top[stack_select]][stack_select] = &(cmd->tree_node);
+    }
 
     while (top[stack_select] >= 0) {
         TreeNode *stack_top = stack[top[stack_select]][stack_select];
