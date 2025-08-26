@@ -686,7 +686,6 @@ static int parse_flags(const SAPCommand *cmd, const int argc, char *argv[]) {
 
 void print_cmd_help(SAPCommand *cmd) {
     SAPCommand *call_stack[MAX_CMD_DEPTH];
-    int p_stack = 0;
 
     assert(cmd != NULL);
     get_cmd_stack(cmd, call_stack);
@@ -738,6 +737,7 @@ void print_cmd_help(SAPCommand *cmd) {
     }
 
     if (get_child_cmd_cnt(cmd) > 0) {
+        int p_stack = 0;
         printf("Use \"");
         while (call_stack[p_stack] != cmd) {
             printf("%s ", call_stack[p_stack]->name);
@@ -788,7 +788,7 @@ static int help_exec(SAPCommand *caller) {
         int depth_cmd2get_help = 0;
         SAPCommand *cmd2get_help = find_sap(&rootCmd, (char **) cmd_flag->value, &depth_cmd2get_help);
         if (cmd2get_help == NULL) {
-            printf("Unknown command: %s. See '%s help'.\n", (char *) cmd_flag->value, rootCmd.name);
+            printf("Unknown command: %s. See '%s help'.\n", ((const char **)cmd_flag->value)[depth_cmd2get_help], rootCmd.name);
             return -1;
         }
         print_cmd_help(cmd2get_help);

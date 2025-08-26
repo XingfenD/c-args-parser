@@ -82,9 +82,16 @@ int main(int argc, char *argv[]) {
     init_sap_command(&sub2, "sub2", "This is short description for sub2", "This is long description for sub2", exec_sub2);
     add_subcmd(&rootCmd, &sub2);
 
+    SAPCommand sub1_sub1;
+    init_sap_command(&sub1_sub1, "sub1_sub1", "This is short description for sub1_sub1", "This is long description for sub1_sub1", NULL);
+    add_subcmd(&sub1, &sub1_sub1);
+
     Flag persist_flag;
     init_flag(&persist_flag, "persist_flag", 'p', "This is long description for persist_flag", "default_value for persist_flag");
     add_persist_flag(&sub1, &persist_flag);
+
+
+
 
     int ret = do_parse_subcmd(argc, argv);
 
