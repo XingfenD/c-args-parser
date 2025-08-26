@@ -169,7 +169,7 @@ typedef struct {
 ​	The two fields: value and type should be used together. When value == NULL, it refers this flag(option) are not provided in the command-line arguments and don't have a default value.
 
 1. type == single_arg: value is a (char *), pointing to a string.
-2. type == multi_arg: value is a (char **), pointing to a string array, which ends with NULL.
+2. type == multi_arg: value is a (char **), pointing to a string array, **which ends with NULL**.
 3. type == no_arg: calue is a (int *), when this option is provided, it will be not NULL.
 
 ## `init_flag` Function

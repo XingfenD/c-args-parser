@@ -299,13 +299,12 @@ static void get_cmd_stack(SAPCommand *cmd, SAPCommand *call_stack[MAX_SUBCMD_COU
  * to allow the unknown argument to be processed as value of the default flag.
  *
  * @param[in] cmd           - a pointer to the root SAPCommand to start searching from.
- * @param[in] cmd_cnt       - the number of command names in the cmd_names array.
  * @param[in] cmd_names     - an array of command name strings to match against.
  * @param[out] out_depth    - a pointer to store the depth of the found command (can be NULL).
  * @return SAPCommand* returns a pointer to the matching command, or the parent
  *                    command if it has a default flag, or NULL if no match is found.
  */
-static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
+static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], int *out_depth) {
     /* NOTE: the first command in cmd_names may not be $cmd */
     #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
@@ -316,6 +315,7 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *c
     int depth = 0;
 
     assert(cmd!= NULL);
+    assert(cmd_names != NULL);
 
     /* push the root into stack */
     stack[++top[stack_select]][stack_select] = &(cmd->tree_node);
@@ -324,7 +324,7 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *c
         stack_top = stack[top[stack_select]][stack_select];
         crt_cmd = node2cmd(stack_top);   /* current command */
 
-        if (depth >= cmd_cnt || cmd_names[depth][0] == '-') {
+        if (cmd_names[depth] == NULL || cmd_names[depth][0] == '-') {
             /* if the depth is out of range or the argv[depth] is an option */
             /**
              * that is:
@@ -397,13 +397,12 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, int cmd_cnt, char *c
  * considering default flags, returning NULL when an unknown command is encountered.
  *
  * @param[in] cmd           - a pointer to the root SAPCommand to start searching from.
- * @param[in] cmd_cnt       - the number of command names in the cmd_names array.
  * @param[in] cmd_names     - an array of command name strings to match against.
  * @param[out] out_depth    - a pointer to store the depth of the found command (can be NULL).
  * @return SAPCommand* returns a pointer to the matching command, or NULL if no
  *                    exact match is found.
  */
-static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int *out_depth) {
+static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_depth) {
     /* NOTE: the first command in cmd_names may not be $cmd */
     #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
@@ -411,7 +410,8 @@ static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int
     int stack_select = 0;                   /* select the available stack*/
     int depth = 0;
 
-    assert(cmd!= NULL);
+    assert(cmd != NULL);
+    assert(cmd_names != NULL);
 
     /* push the root into stack */
     stack[++top[stack_select]][stack_select] = &(cmd->tree_node);
@@ -420,7 +420,7 @@ static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int
         TreeNode *stack_top = stack[top[stack_select]][stack_select];
         SAPCommand *crt_cmd = node2cmd(stack_top);   /* current command */
 
-        if (depth >= cmd_cnt || cmd_names[depth][0] == '-') {
+        if (cmd_names[depth] == NULL || cmd_names[depth][0] == '-') {
             /* if the depth is out of range or the argv[depth] is an option */
             /**
              * that is:
@@ -439,7 +439,7 @@ static SAPCommand *find_sap(SAPCommand *cmd, int cmd_cnt, char *cmd_names[], int
             strcmp(crt_cmd->name, cmd->name) != 0) {
             /* if current cmd isn't our target cmd or root cmd */
             if (--top[stack_select] < 0) {
-                /* pop and judge whether the stack is empty */
+                /* pop and then judge whether the stack is empty */
                 stack_select = not_stack_select;    /* switch the stack */
                 depth++;
             }   /* top[stack_select] == -1 */
@@ -487,24 +487,22 @@ typedef enum {
     long_option_with_equal = 3,
 } ArgType;
 
-static ArgType get_option_type(char *arg) {
+static ArgType get_option_type(const char *arg) {
     if (
-        (arg[0] == '-' && arg[1] == '\0') ||
-        (arg[0] == '-' && arg[1] != '-' && strlen(arg + 1) > 1) ||
-        (arg[0] == '-' && arg[1] == '-' && arg[2] == '=') ||
-        (arg[0] == '-' && arg[1] == '-' && arg[2] == '\0')
-    ) {
-        /* if the arg is an error option */
+        (arg[0] == '-' && arg[1] == '\0') ||                        /* '-'      short option without flag name */
+        (arg[0] == '-' && arg[1] != '-' && strlen(arg + 1) > 1) ||  /* '-long'  long option with only single hyphen */
+        (arg[0] == '-' && arg[1] == '-' && arg[2] == '=') ||        /* '--='    long option with only equal */
+        (arg[0] == '-' && arg[1] == '-' && arg[2] == '\0')          /* '--'     long option without flag name */
+    ) {                                             /* if the arg is an error option */
         return error_option;
     } else if (arg[0] == '-' && arg[1] == '-') {    /* if the arg is a long option */
-        if (strchr(arg, '=') != NULL) {
-            /* if the arg is a long option with '=' */
+        if (strchr(arg, '=') != NULL) {             /* if the arg is a long option with '=' */
             return long_option_with_equal;
         }
         return long_option;
     } else if (arg[0] == '-' && arg[1] != '\0') {   /* if the arg is a short option */
         return short_option;
-    } else {    /* if the arg is a normal arg */
+    } else {                                        /* if the arg is a normal arg */
         return normal_arg;
     }
 }
@@ -524,7 +522,7 @@ static ArgType get_option_type(char *arg) {
  * @return int returns 0 if the parsing is successful. If an error option is found,
  *             it returns the index of that option in the argv array.
  */
-static int parse_flags(SAPCommand *cmd, int argc, char *argv[]) {
+static int parse_flags(const SAPCommand *cmd, const int argc, char *argv[]) {
     /* Ensure that the input parameters are not null and argc is greater than 0 */
     assert(cmd != NULL);
     assert(argc > 0);
@@ -776,20 +774,25 @@ int void_self_parse_exec(SAPCommand *caller, int argc, char *argv[]) {
     return 1;
 }
 
-static int help_exec(SAPCommand *caller, int argc, char *argv[]) {
+static int help_exec(SAPCommand *caller) {
     /* verify the caller */
     assert(caller != NULL);
     assert(strcmp("help", caller->name) == 0);
 
-    int depth_cmd2get_help = 0;
-    SAPCommand *cmd2get_help = find_sap(&rootCmd, argc, argv, &depth_cmd2get_help);
+    Flag *cmd_flag = get_flag(caller, "cmd");
 
-    if (cmd2get_help == NULL) {
-        printf("Unknown command: %s. See '%s help'.\n", argv[depth_cmd2get_help], rootCmd.name);
-        return -1;
+    assert(cmd_flag != NULL);
+    if (cmd_flag->value == NULL) {
+        print_cmd_help(&rootCmd);
+    } else {
+        int depth_cmd2get_help = 0;
+        SAPCommand *cmd2get_help = find_sap(&rootCmd, (char **) cmd_flag->value, &depth_cmd2get_help);
+        if (cmd2get_help == NULL) {
+            printf("Unknown command: %s. See '%s help'.\n", (char *) cmd_flag->value, rootCmd.name);
+            return -1;
+        }
+        print_cmd_help(cmd2get_help);
     }
-
-    print_cmd_help(cmd2get_help);
 
     return 0;
 }
@@ -842,8 +845,8 @@ static int call_exec(SAPCommand *caller, int argc, char *argv[]) {
 /* ++++ functions for initialization ++++ */
 
 static void add_helpcmd() {
-    init_sap_command(&helpCmd, "help", "Display this help message", NULL, NULL);
-    set_cmd_self_parse(&helpCmd, help_exec);
+    init_sap_command(&helpCmd, "help", "Display this help message", NULL, help_exec);
+    // set_cmd_self_parse(&helpCmd, help_exec);
     set_flag_type(&helpFlag, no_arg);
     add_subcmd(&rootCmd, &helpCmd);
 }
@@ -966,14 +969,14 @@ int do_parse_subcmd(int argc, char *argv[]) {
     /* the helpCmd's default flag */
     Flag *cmd2get_help = (Flag *) malloc(sizeof(Flag));
     init_flag(cmd2get_help, "cmd", 'c', "Specify the command to get help", NULL);   /* initialize the flag */
-
+    set_flag_type(cmd2get_help, multi_arg);
     add_helpcmd();                              /* add the help subcommand to the root command */
     // set_flag_type(cmd2get_help, multi_arg);
     add_default_flag(&helpCmd, cmd2get_help);   /* add the flag to the help command as the default flag */
     check_shorthand();                          /* check the duplicate shorthand */
 
     /* find the command to execute considering flags */
-    cmd2run = find_sap_consider_flags(&rootCmd, argc, argv, &depth);
+    cmd2run = find_sap_consider_flags(&rootCmd, argv, &depth);
 
     /* if the command to execute is found */
     if (cmd2run != NULL) {
