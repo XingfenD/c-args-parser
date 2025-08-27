@@ -290,40 +290,27 @@ static void get_cmd_stack(SAPCommand *cmd, SAPCommand *call_stack[MAX_SUBCMD_COU
     }
 }
 
-/**
- * @brief find the appropriate SAPCommand based on command names, considering default flags.
- *
- * this function traverses the command tree using a breadth-first search approach
- * to find the matching command. When an unknown command is encountered, it checks
- * if the parent command has a default flag. If so, it returns the parent command
- * to allow the unknown argument to be processed as value of the default flag.
- *
- * @param[in] cmd           - a pointer to the root SAPCommand to start searching from.
- * @param[in] cmd_names     - an array of command name strings to match against.
- * @param[out] out_depth    - a pointer to store the depth of the found command (can be NULL).
- * @return SAPCommand* returns a pointer to the matching command, or the parent
- *                    command if it has a default flag, or NULL if no match is found.
- */
-static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], int *out_depth) {
+static SAPCommand *find_sap_consider_flags_without_sub_root(SAPCommand *cmd, char *cmd_names[], int *out_idx) {
     #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     TreeNode *stack_top = NULL;
     SAPCommand *crt_cmd = NULL;
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
     int stack_select = 0;                   /* select the available stack*/
-    int depth = 0;
+    int idx = 0;
 
     assert(cmd!= NULL);
     assert(cmd_names != NULL);
 
-    /* push the root into stack */
-    stack[++top[stack_select]][stack_select] = &(cmd->tree_node);
+    for (int i = 0; i < cmd->tree_node.child_cnt; i++) {
+        stack[++top[stack_select]][stack_select] = cmd->tree_node.children[i];
+    }
 
     while (top[stack_select] >= 0) {
         stack_top = stack[top[stack_select]][stack_select];
         crt_cmd = node2cmd(stack_top);   /* current command */
 
-        if (cmd_names[depth] == NULL || cmd_names[depth][0] == '-') {
+        if (cmd_names[idx] == NULL || cmd_names[idx][0] == '-') {
             /* if the depth is out of range or the argv[depth] is an option */
             /**
              * that is:
@@ -332,19 +319,18 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], i
              */
             SAPCommand *parent_cmd = get_parent_cmd(*crt_cmd);
             /* exec the parent cmd, consequently depth decrease */
-            if (out_depth != NULL) {
-                *out_depth = depth - 1;
+            if (out_idx != NULL) {
+                *out_idx = idx - 1;
             }
             return parent_cmd;
         }
 
-        if (strcmp(crt_cmd->name, cmd_names[depth]) != 0 &&
-            strcmp(crt_cmd->name, cmd->name) != 0) {
+        if (strcmp(crt_cmd->name, cmd_names[idx]) != 0) {
             /* if current cmd isn't our target cmd or root cmd */
             if (--top[stack_select] < 0) {
                 /* pop and judge whether the stack is empty */
                 stack_select = not_stack_select;    /* switch the stack */
-                depth++;
+                idx++;
             }   /* top[stack_select] == -1 */
             continue;
         }   /* if current cmd isn't our target cmd */
@@ -353,8 +339,8 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], i
 
         if (stack_top->child_cnt == 0) {
             /* exit of leaf nodes */
-            if (out_depth != NULL) {
-                *out_depth = depth;
+            if (out_idx != NULL) {
+                *out_idx = idx;
             }
             return crt_cmd;
         }   /* exit of leaf nodes */
@@ -368,7 +354,7 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], i
 
         top[stack_select] = -1;
         stack_select = not_stack_select;
-        depth++;
+        idx++;
 
         /* ---- non-leaf node ---- */
         /* ---- if current cmd is our target cmd ---- */
@@ -376,32 +362,19 @@ static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], i
     }
 
     /* ++++ exit of unknown cmds ++++ */
-    if (out_depth != NULL) {
-        *out_depth = depth - 1;
+    if (out_idx != NULL) {
+        *out_idx = idx - 1;
     }
 
     if (get_parent_cmd(*crt_cmd)->default_flag != NULL) {
-        *out_depth -= 1;
+        *out_idx -= 1;
         return get_parent_cmd(*crt_cmd);
     }
 
     return NULL;
 }
 
-/**
- * @brief find the appropriate SAPCommand based on command names.
- *
- * this function traverses the command tree using a breadth-first search approach
- * to find the matching command. It performs strict command matching without
- * considering default flags, returning NULL when an unknown command is encountered.
- *
- * @param[in] cmd           - a pointer to the root SAPCommand to start searching from.
- * @param[in] cmd_names     - an array of command name strings to match against.
- * @param[out] out_depth    - a pointer to store the depth of the found command (can be NULL).
- * @return SAPCommand* returns a pointer to the matching command, or NULL if no
- *                    exact match is found.
- */
-static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_depth) {
+static SAPCommand *find_sap_without_sub_root(SAPCommand *cmd, char *cmd_names[], int *out_idx) {
     #define not_stack_select (((stack_select) == 0)? 1: 0)
     TreeNode *stack[MAX_CMD_COUNT][2];      /* two stack cosplay a queue */
     int top[2] = {-1, -1};                  /* the top ptr of the two stack */
@@ -411,13 +384,8 @@ static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_depth) 
     assert(cmd != NULL);
     assert(cmd_names != NULL);
 
-    if (strcmp(cmd_names[0], cmd->name) != 0) {
-        for (int i = 0; i < cmd->tree_node.child_cnt; i++) {
-            stack[++top[stack_select]][stack_select] = cmd->tree_node.children[i];
-        }
-    } else {
-        /* push the root into stack */
-        stack[++top[stack_select]][stack_select] = &(cmd->tree_node);
+    for (int i = 0; i < cmd->tree_node.child_cnt; i++) {
+        stack[++top[stack_select]][stack_select] = cmd->tree_node.children[i];
     }
 
     while (top[stack_select] >= 0) {
@@ -433,14 +401,13 @@ static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_depth) 
              */
             SAPCommand *parent_cmd = get_parent_cmd(*crt_cmd);
             /* exec the parent cmd, consequently depth decrease */
-            if (out_depth != NULL) {
-                *out_depth = depth - 1;
+            if (out_idx != NULL) {
+                *out_idx = depth - 1;
             }
             return parent_cmd;
         }
 
-        if (strcmp(crt_cmd->name, cmd_names[depth]) != 0 &&
-            strcmp(crt_cmd->name, cmd->name) != 0) {
+        if (strcmp(crt_cmd->name, cmd_names[depth]) != 0) {
             /* if current cmd isn't our target cmd or root cmd */
             if (--top[stack_select] < 0) {
                 /* pop and then judge whether the stack is empty */
@@ -454,8 +421,8 @@ static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_depth) 
 
         if (stack_top->child_cnt == 0) {
             /* exit of leaf nodes */
-            if (out_depth != NULL) {
-                *out_depth = depth;
+            if (out_idx != NULL) {
+                *out_idx = depth;
             }
             return crt_cmd;
         }   /* exit of leaf nodes */
@@ -477,10 +444,57 @@ static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_depth) 
     }
 
     /* ++++ exit of unknown cmds ++++ */
-    if (out_depth != NULL) {
-        *out_depth = depth - 1;
+    if (out_idx != NULL) {
+        *out_idx = depth - 1;
     }
     return NULL;
+}
+
+/**
+ * @brief find the appropriate SAPCommand based on command names.
+ *
+ * this function traverses the command tree using a breadth-first search approach
+ * to find the matching command. It performs strict command matching without
+ * considering default flags, returning NULL when an unknown command is encountered.
+ *
+ * @param[in] cmd           - a pointer to the root SAPCommand to start searching from.
+ * @param[in] cmd_names     - an array of command name strings to match against.
+ * @param[out] out_idx      - a pointer to store the index of the found command in cmd_names (can be NULL).
+ * @return SAPCommand* returns a pointer to the matching command, or NULL if no
+ *                    exact match is found.
+ *
+ * NOTE: the first element of $cmd_names must be corresponding to $cmd, but it will be ignored by the realization
+ */
+static SAPCommand *find_sap(SAPCommand *cmd, char *cmd_names[], int *out_idx) {
+    SAPCommand *ret = find_sap_without_sub_root(cmd, cmd_names + 1, out_idx);
+    if (out_idx != NULL) {
+        *out_idx += 1;
+    }
+    return ret;
+}
+
+/**
+ * @brief find the appropriate SAPCommand based on command names, considering default flags.
+ *
+ * this function traverses the command tree using a breadth-first search approach
+ * to find the matching command. When an unknown command is encountered, it checks
+ * if the parent command has a default flag. If so, it returns the parent command
+ * to allow the unknown argument to be processed as value of the default flag.
+ *
+ * @param[in] cmd           - a pointer to the root SAPCommand to start searching from.
+ * @param[in] cmd_names     - an array of command name strings to match against.
+ * @param[out] out_idx      - a pointer to store the index of the found command in cmd_names (can be NULL).
+ * @return SAPCommand* returns a pointer to the matching command, or the parent
+ *                    command if it has a default flag, or NULL if no match is found.
+ *
+ * NOTE: the first element of $cmd_names must be corresponding to $cmd, but it will be ignored by the realization
+ */
+static SAPCommand *find_sap_consider_flags(SAPCommand *cmd, char *cmd_names[], int *out_idx) {
+    SAPCommand *ret = find_sap_consider_flags_without_sub_root(cmd, cmd_names + 1, out_idx);
+    if (out_idx != NULL) {
+        *out_idx += 1;
+    }
+    return ret;
 }
 
 typedef enum {
@@ -790,7 +804,7 @@ static int help_exec(SAPCommand *caller) {
         print_cmd_help(&rootCmd);
     } else {
         int depth_cmd2get_help = 0;
-        SAPCommand *cmd2get_help = find_sap(&rootCmd, (char **) cmd_flag->value, &depth_cmd2get_help);
+        SAPCommand *cmd2get_help = find_sap_without_sub_root(&rootCmd, (char **) cmd_flag->value, &depth_cmd2get_help);
         if (cmd2get_help == NULL) {
             printf("Unknown command: %s. See '%s help'.\n", ((const char **)cmd_flag->value)[depth_cmd2get_help], rootCmd.name);
             return -1;
