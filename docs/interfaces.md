@@ -1,4 +1,11 @@
-# detailed introduction to scap interface
+# Detailed Introduction to SCAP Interface
+
+> **Version**: 1.0 (Updated August 2025)  
+> **Recent Updates**: Unified I/O rules for find_sap functions, improved help command parsing
+
+## Overview
+
+This document provides comprehensive interface documentation for the Simple C Argument Parser (SCAP) library. The library has been recently updated with improved command tree traversal algorithms and unified function interfaces.
 
 ## `SAPCommand` Structure
 
@@ -29,6 +36,12 @@ typedef struct SAPCommand_ {
 - flags
 
 ​	About field `parse_by_self` and `exec_self_parse`, take a look at [`set_cmd_self_parse`](#`set_cmd_self_parse` Function) section.
+
+### Recent Improvements (v1.0 - August 2025)
+
+- **Unified I/O Rules**: The `find_sap` family of functions now have consistent input/output parameter handling
+- **Enhanced Help System**: Help commands now properly parse arguments and flags through the framework
+- **Improved Tree Traversal**: Command tree traversal algorithms have been optimized for better performance
 
 ## `init_sap_cmd` and `init_root_cmd` Function
 

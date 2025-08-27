@@ -140,9 +140,17 @@ Core parsing functionality stable
 - [ ] Option dependency checks
 - [ ] Interactive help system
 
-🐞 **Known Bugs**
+🐞 **Recent Fixes & Improvements**
 
-- The flags of help subcommand does not take effect
+- ✅ Unified I/O rules for find_sap functions (v1.0 - Aug 2025)
+- ✅ Help command now properly parses arguments and flags
+- ✅ Improved command tree traversal algorithms
+
+🐞 **Known Issues**
+
+- Minor edge cases in multi-argument flag handling
+- Performance optimization needed for deep command trees
+- `find_sap` function cannot correctly identify Unknown Command when handling cases without subcommands
 
 ## License
 
