@@ -138,7 +138,6 @@ Core parsing functionality stable
 
 - [ ] Combined short flags (e.g. `-rvf`)
 - [ ] Option dependency checks
-- [ ] Interactive help system
 
 🐞 **Recent Fixes & Improvements**
 
@@ -148,9 +147,18 @@ Core parsing functionality stable
 
 🐞 **Known Issues**
 
-- Minor edge cases in multi-argument flag handling
-- Performance optimization needed for deep command trees
 - `find_sap` function cannot correctly identify Unknown Command when handling cases without subcommands
+
+  Example: The following two commands produce different results:
+  ```
+  # Correctly identifies unknown command
+  build/test_c help sub1 unknown_cmd
+  # Output: Unknown command: unknown_cmd. See 'example help'.
+
+  # Doesn't correctly identify unknown command, instead shows help for subcommand
+  build/test_c help sub1 sub1_sub1 unknown_cmd
+  # Output: [Shows help information for sub1_sub1]
+  ```
 
 ## License
 

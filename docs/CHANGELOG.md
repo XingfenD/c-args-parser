@@ -33,17 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved error handling in argument parsing
 - Enhanced documentation with comprehensive API reference
 
+## [1.0.1] - 2025-10-18
+
+### Changed
+- Update Documentation with Examples for Known Issues
+
 ## [Unreleased]
 
 ### Planned Features
 - Combined short flags support (e.g., `-rvf`)
 - Option dependency validation
-- Interactive help system
 - Performance optimizations for deep command trees
 
 ### Known Issues
-- Minor edge cases in multi-argument flag handling
-- Performance could be improved for very deep command hierarchies
 - `find_sap` function cannot correctly identify Unknown Command when handling cases without subcommands
 
 ---
